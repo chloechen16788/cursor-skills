@@ -54,6 +54,9 @@ python3 scripts/feishu_cli.py auth login --code '<CODE>'
 python3 scripts/feishu_cli.py auth whoami
 python3 scripts/feishu_cli.py summary unread --hours 24
 python3 scripts/feishu_cli.py summary unread --hours 24 --notify
+python3 scripts/feishu_cli.py summary tick --minutes 30 --notify --force
+# 安装本机 cron（每天 07:00-19:00 每 30 分钟，需 ~/.config/feishu-cli/app.env）
+bash scripts/install_cron.sh
 python3 scripts/feishu_cli.py bot info
 python3 scripts/feishu_cli.py chat list --page-size 20
 python3 scripts/feishu_cli.py chat get --chat-id oc_xxx

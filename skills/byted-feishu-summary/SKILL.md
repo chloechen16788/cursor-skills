@@ -71,6 +71,13 @@ python3 scripts/feishu_cli.py summary unread --hours 24 --format markdown
 python3 scripts/feishu_cli.py summary unread --hours 24 --notify
 ```
 
+半小时节拍（北京时间 07:00-19:00）并推送飞书：
+
+```bash
+python3 scripts/feishu_cli.py summary tick --minutes 30 --notify
+bash scripts/install_cron.sh
+```
+
 ## 对用户的输出格式
 
 用 CLI 返回的 `related` / `others` 写成中文摘要，结构固定为：

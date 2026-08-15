@@ -204,16 +204,41 @@ def paginate_messages(
     return items[:max_messages]
 
 
+def in_active_window(
+    *,
+    start: str = "07:00",
+    end: str = "19:00",
+    now: Optional[datetime] = None,
+) -> bool:
+    current = now or datetime.now(BJ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=BJ)
+    else:
+        current = current.astimezone(BJ)
+    start_t = datetime.strptime(start, "%H:%M").time()
+    end_t = datetime.strptime(end, "%H:%M").time()
+    value = current.timetz().replace(tzinfo=None)
+    if start_t <= end_t:
+        return start_t <= value <= end_t
+    return value >= start_t or value <= end_t
+
+
 def collect_unread_window(
     client: FeishuClient,
     *,
     me_ids: Set[str],
-    hours: int = 24,
+    hours: float = 24,
+    minutes: Optional[int] = None,
     max_chats: int = 40,
     max_messages_per_chat: int = 40,
 ) -> Dict[str, Any]:
     end_time = int(time.time())
-    start_time = end_time - hours * 3600
+    if minutes is not None:
+        start_time = end_time - int(minutes) * 60
+        window_hours = int(minutes) / 60
+    else:
+        start_time = end_time - int(float(hours) * 3600)
+        window_hours = float(hours)
     chats = paginate_chats(client, max_chats=max_chats)
     related: List[Dict[str, Any]] = []
     others: List[Dict[str, Any]] = []
@@ -284,7 +309,8 @@ def collect_unread_window(
     others.sort(key=lambda x: x.get("create_time") or 0, reverse=True)
     return {
         "window": {
-            "hours": hours,
+            "hours": window_hours,
+            "minutes": minutes if minutes is not None else int(window_hours * 60),
             "start_time": start_time,
             "end_time": end_time,
             "start_time_text": format_time(start_time),
@@ -326,7 +352,7 @@ def render_markdown(result: Mapping[str, Any]) -> str:
     related = list(result.get("related") or [])
     others = list(result.get("others") or [])
     lines = [
-        f"# 飞书近 {window.get('hours', 24)} 小时消息总结",
+        f"# 飞书近 {window.get('minutes') or int(float(window.get('hours', 24)) * 60)} 分钟消息总结",
         "",
         f"- 时间范围：{window.get('start_time_text')} ~ {window.get('end_time_text')}（北京时间）",
         f"- 扫描会话：{result.get('chats_scanned', 0)}",

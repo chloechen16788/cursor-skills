@@ -25,6 +25,7 @@
 | `auth logout` | 本地删凭证 | 读 |
 | `summary unread` | 分页 `GET /im/v1/chats` + `GET /im/v1/messages` | 读 |
 | `summary unread --notify` | 总结后 `POST /im/v1/messages` 推到飞书（手机通知） | **写** |
+| `summary tick` | 北京时间 07:00-19:00 内总结近 30 分钟并推送 | **写** |
 | `bot info` | `GET /bot/v3/info` | 读 |
 | `chat list` | `GET /im/v1/chats` | 读 |
 | `chat get --chat-id` | `GET /im/v1/chats/:chat_id` | 读 |

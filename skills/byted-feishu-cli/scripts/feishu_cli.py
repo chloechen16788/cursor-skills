@@ -43,7 +43,7 @@ from oauth import (  # noqa: E402
     refresh_user_token,
     start_device_login,
 )
-from summary import collect_unread_window, render_markdown  # noqa: E402
+from summary import collect_unread_window, in_active_window, render_markdown  # noqa: E402
 
 CLI_VERSION = "1.1.0"
 
@@ -461,6 +461,7 @@ def cmd_summary_unread(args: argparse.Namespace) -> Dict[str, Any]:
         client,
         me_ids=me_ids,
         hours=args.hours,
+        minutes=getattr(args, "minutes", None),
         max_chats=args.max_chats,
         max_messages_per_chat=args.max_messages_per_chat,
     )
@@ -502,6 +503,45 @@ def cmd_summary_unread(args: argparse.Namespace) -> Dict[str, Any]:
     return success("summary.unread", collected)
 
 
+def cmd_summary_tick(args: argparse.Namespace) -> Dict[str, Any]:
+    if not args.force and not in_active_window(start=args.window_start, end=args.window_end):
+        return success(
+            "summary.tick",
+            {
+                "skipped": True,
+                "reason": "outside_window",
+                "window_start": args.window_start,
+                "window_end": args.window_end,
+                "timezone": "Asia/Shanghai",
+            },
+        )
+    args.hours = args.hours if args.minutes is None else args.hours
+    args.notify = True if args.notify or not args.dry_run else args.notify
+    if args.dry_run:
+        args.notify = False
+    payload = cmd_summary_unread(args)
+    result = payload.get("result") if isinstance(payload, dict) else None
+    if (
+        args.skip_empty
+        and isinstance(result, dict)
+        and not result.get("related_count")
+        and not result.get("others_count")
+        and not result.get("skipped")
+    ):
+        return success(
+            "summary.tick",
+            {
+                "skipped": True,
+                "reason": "empty",
+                "window": result.get("window"),
+            },
+        )
+    if isinstance(result, dict):
+        result["skipped"] = False
+        result["tick"] = True
+    return payload
+
+
 def cmd_api_call(args: argparse.Namespace) -> Dict[str, Any]:
     client = build_client(args)
     params = _load_json_value(args.params, flag="--params") if args.params else None
@@ -533,6 +573,7 @@ HANDLERS = {
     "auth.whoami": cmd_auth_whoami,
     "auth.logout": cmd_auth_logout,
     "summary.unread": cmd_summary_unread,
+    "summary.tick": cmd_summary_tick,
     "bot.info": cmd_bot_info,
     "chat.list": cmd_chat_list,
     "chat.get": cmd_chat_get,
@@ -621,7 +662,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_unread = summary_sub.add_parser(
         "unread", parents=[common], help="总结近 N 小时未读/待处理消息"
     )
-    p_unread.add_argument("--hours", type=int, default=24)
+    p_unread.add_argument("--hours", type=float, default=24)
+    p_unread.add_argument("--minutes", type=int, help="覆盖 --hours，按分钟取窗口")
     p_unread.add_argument("--max-chats", type=int, default=40)
     p_unread.add_argument("--max-messages-per-chat", type=int, default=40)
     p_unread.add_argument("--format", choices=["json", "markdown"], default="json")
@@ -642,6 +684,31 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["open_id", "user_id", "union_id", "email", "chat_id"],
     )
     p_unread.set_defaults(action="summary.unread")
+
+    p_tick = summary_sub.add_parser(
+        "tick",
+        parents=[common],
+        help="定时节拍：窗口内总结近 N 分钟并推送飞书",
+    )
+    p_tick.add_argument("--hours", type=float, default=0.5)
+    p_tick.add_argument("--minutes", type=int, default=30)
+    p_tick.add_argument("--max-chats", type=int, default=40)
+    p_tick.add_argument("--max-messages-per-chat", type=int, default=40)
+    p_tick.add_argument("--format", choices=["json", "markdown"], default="json")
+    p_tick.add_argument("--allow-bot", action="store_true")
+    p_tick.add_argument("--notify", action="store_true", default=True)
+    p_tick.add_argument("--notify-to")
+    p_tick.add_argument(
+        "--notify-id-type",
+        default="open_id",
+        choices=["open_id", "user_id", "union_id", "email", "chat_id"],
+    )
+    p_tick.add_argument("--window-start", default="07:00", help="北京时间开始，默认 07:00")
+    p_tick.add_argument("--window-end", default="19:00", help="北京时间结束，默认 19:00")
+    p_tick.add_argument("--force", action="store_true", help="忽略时间窗，用于测试")
+    p_tick.add_argument("--dry-run", action="store_true", help="只总结不推送")
+    p_tick.add_argument("--skip-empty", action="store_true", help="没有新消息则不推送")
+    p_tick.set_defaults(action="summary.tick")
 
     bot = sub.add_parser("bot", parents=[common], help="机器人信息")
     bot_sub = bot.add_subparsers(dest="bot_command", required=True)

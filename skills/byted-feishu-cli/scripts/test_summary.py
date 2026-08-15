@@ -5,8 +5,12 @@ from __future__ import annotations
 
 import unittest
 
+from datetime import datetime
+
 from summary import (
+    BJ,
     extract_text,
+    in_active_window,
     is_from_me,
     is_related_to_me,
     related_reasons,
@@ -96,6 +100,16 @@ class SummaryTests(unittest.TestCase):
         self.assertIn("与我相关", text)
         self.assertIn("测试组", text)
         self.assertIn("其他消息", text)
+
+    def test_active_window(self):
+        noon = datetime(2026, 8, 15, 12, 0, tzinfo=BJ)
+        early = datetime(2026, 8, 15, 6, 59, tzinfo=BJ)
+        late = datetime(2026, 8, 15, 19, 1, tzinfo=BJ)
+        edge = datetime(2026, 8, 15, 19, 0, tzinfo=BJ)
+        self.assertTrue(in_active_window(now=noon))
+        self.assertFalse(in_active_window(now=early))
+        self.assertFalse(in_active_window(now=late))
+        self.assertTrue(in_active_window(now=edge))
 
 
 if __name__ == "__main__":
