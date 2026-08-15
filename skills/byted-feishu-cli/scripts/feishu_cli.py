@@ -469,8 +469,36 @@ def cmd_summary_unread(args: argparse.Namespace) -> Dict[str, Any]:
     collected["related_count"] = len(collected.get("related") or [])
     collected["others_count"] = len(collected.get("others") or [])
     collected["markdown"] = render_markdown(collected)
+    if getattr(args, "notify", False):
+        receive_id = args.notify_to or me_profile.get("open_id")
+        if not receive_id:
+            raise CliError("推送手机通知需要当前用户 open_id 或 --notify-to")
+        receive_id_type = args.notify_id_type
+        bot_client = FeishuClient(
+            app_id=client.app_id,
+            app_secret=client.app_secret,
+            timeout=client.timeout,
+            prefer_user_token=False,
+        )
+        notify_text = collected["markdown"]
+        if len(notify_text) > 3500:
+            notify_text = notify_text[:3499] + "…"
+        sent = bot_client.send_message(
+            receive_id=str(receive_id),
+            receive_id_type=receive_id_type,
+            msg_type="text",
+            content={"text": notify_text},
+        )
+        collected["notified"] = {
+            "receive_id_type": receive_id_type,
+            "receive_id": str(receive_id),
+            "message_id": (sent.get("data") or sent).get("message_id"),
+        }
     if args.format == "markdown":
-        return success("summary.unread", {"markdown": collected["markdown"], "me": me_profile})
+        result = {"markdown": collected["markdown"], "me": me_profile}
+        if collected.get("notified"):
+            result["notified"] = collected["notified"]
+        return success("summary.unread", result)
     return success("summary.unread", collected)
 
 
@@ -601,6 +629,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-bot",
         action="store_true",
         help="无用户登录时退化为总结机器人所在群（不是个人未读）",
+    )
+    p_unread.add_argument(
+        "--notify",
+        action="store_true",
+        help="由机器人把总结推送到飞书，手机可收到通知",
+    )
+    p_unread.add_argument("--notify-to", help="推送目标，默认当前登录用户 open_id")
+    p_unread.add_argument(
+        "--notify-id-type",
+        default="open_id",
+        choices=["open_id", "user_id", "union_id", "email", "chat_id"],
     )
     p_unread.set_defaults(action="summary.unread")
 

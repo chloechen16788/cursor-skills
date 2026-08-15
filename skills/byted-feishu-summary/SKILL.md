@@ -65,6 +65,12 @@ python3 scripts/feishu_cli.py summary unread --hours 24 --format json
 python3 scripts/feishu_cli.py summary unread --hours 24 --format markdown
 ```
 
+推到飞书（手机会收到机器人消息通知）：
+
+```bash
+python3 scripts/feishu_cli.py summary unread --hours 24 --notify
+```
+
 ## 对用户的输出格式
 
 用 CLI 返回的 `related` / `others` 写成中文摘要，结构固定为：
