@@ -32,7 +32,7 @@ IM、Bot、群消息走本 CLI；文档搜索继续用 `byted-viking-aisearch-fe
 
 1. 环境变量 `FEISHU_TENANT_ACCESS_TOKEN` / `LARK_TENANT_ACCESS_TOKEN` / `FEISHU_TENANT_TOKEN`
 2. `FEISHU_APP_ID` + `FEISHU_APP_SECRET`（或 `LARK_APP_ID` + `LARK_APP_SECRET`）换取 tenant token
-3. 需要用户身份时：`LARK_USER_ACCESS_TOKEN` / `FEISHU_USER_ACCESS_TOKEN`，并加 `--use-user-token`
+3. 需要用户身份时：执行 `auth login`（Device Flow，打开飞书链接确认即可，**不必改应用重定向 URL**）
 
 可选：
 

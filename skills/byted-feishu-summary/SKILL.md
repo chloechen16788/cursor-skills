@@ -33,15 +33,16 @@ python3 scripts/feishu_cli.py auth status
 python3 scripts/feishu_cli.py auth whoami
 ```
 
-未登录时：
-
-1. 生成链接：`python3 scripts/feishu_cli.py auth login-url`
-2. 请用户在飞书开放平台「安全设置」添加重定向 URL（默认 `http://127.0.0.1:8765/callback`）
-3. 请用户打开 `authorize_url` 登录授权
-4. 用户把回调 URL 里的 `code` 发回来后执行：
+未登录时走 Device Flow（用户直接打开飞书链接确认，不必改应用）：
 
 ```bash
-python3 scripts/feishu_cli.py auth login --code '<CODE>'
+python3 scripts/feishu_cli.py auth login --no-wait
+```
+
+把 `verification_uri_complete` 原样发给用户。用户确认后：
+
+```bash
+python3 scripts/feishu_cli.py auth login --device-code '<device_code>'
 ```
 
 已有 `user_access_token` 时可：

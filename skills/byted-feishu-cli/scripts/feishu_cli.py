@@ -39,7 +39,9 @@ from oauth import (  # noqa: E402
     DEFAULT_SCOPES,
     build_authorize_url,
     exchange_code,
+    poll_device_token,
     refresh_user_token,
+    start_device_login,
 )
 from summary import collect_unread_window, render_markdown  # noqa: E402
 
@@ -223,23 +225,9 @@ def cmd_auth_login_url(args: argparse.Namespace) -> Dict[str, Any]:
     return success("auth.login_url", info)
 
 
-def cmd_auth_login(args: argparse.Namespace) -> Dict[str, Any]:
-    client = build_client(args)
-    creds = load_credentials(getattr(args, "credentials", None))
-    if args.user_token:
-        creds["user_access_token"] = args.user_token
-        creds.pop("expires_at", None)
-    elif args.code:
-        token_info = exchange_code(
-            client, code=args.code, redirect_uri=args.redirect_uri
-        )
-        creds.update(token_info)
-        client.set_user_token(str(token_info["user_access_token"]))
-    else:
-        raise CliError("请提供 --code 或 --user-token；需要登录链接时用 auth login-url")
-
+def _finish_user_login(args: argparse.Namespace, client: FeishuClient, creds: Dict[str, Any]) -> Dict[str, Any]:
     client.set_user_token(str(creds.get("user_access_token") or ""))
-    profile = {}
+    profile: Dict[str, Any] = {}
     try:
         profile = _public_user_profile(client.get_user_info())
         creds.update({k: v for k, v in profile.items() if v})
@@ -253,8 +241,66 @@ def cmd_auth_login(args: argparse.Namespace) -> Dict[str, Any]:
             "user": profile,
             "scope": creds.get("scope"),
             "expires_at": creds.get("expires_at"),
+            "method": "device_flow",
         },
     )
+
+
+def cmd_auth_login(args: argparse.Namespace) -> Dict[str, Any]:
+    client = build_client(args)
+    creds = load_credentials(getattr(args, "credentials", None))
+    if args.user_token:
+        creds["user_access_token"] = args.user_token
+        creds.pop("expires_at", None)
+        return _finish_user_login(args, client, creds)
+    if args.code:
+        token_info = exchange_code(
+            client, code=args.code, redirect_uri=args.redirect_uri
+        )
+        creds.update(token_info)
+        return _finish_user_login(args, client, creds)
+
+    device = creds.get("device") if isinstance(creds.get("device"), dict) else {}
+    device_code = args.device_code or device.get("device_code")
+    if args.device_code or (device_code and args.poll):
+        token_info = poll_device_token(
+            client,
+            device_code=str(device_code),
+            interval=int(device.get("interval") or 5),
+            expires_in=int(device.get("expires_in") or 600),
+            wait=not args.no_wait,
+            max_wait_seconds=args.wait_seconds,
+        )
+        creds.update(token_info)
+        creds.pop("device", None)
+        return _finish_user_login(args, client, creds)
+
+    started = start_device_login(client, scope=args.scope or DEFAULT_SCOPES)
+    creds["device"] = started
+    save_credentials(creds, getattr(args, "credentials", None))
+    if args.no_wait:
+        return success(
+            "auth.login",
+            {
+                "status": "authorization_pending",
+                "verification_uri_complete": started.get("verification_uri_complete"),
+                "user_code": started.get("user_code"),
+                "device_code": started.get("device_code"),
+                "expires_in": started.get("expires_in"),
+                "instruction": "用飞书打开 verification_uri_complete，确认授权后执行 auth login --device-code <device_code>",
+            },
+        )
+    token_info = poll_device_token(
+        client,
+        device_code=str(started["device_code"]),
+        interval=int(started.get("interval") or 5),
+        expires_in=int(started.get("expires_in") or 600),
+        wait=True,
+        max_wait_seconds=args.wait_seconds,
+    )
+    creds.update(token_info)
+    creds.pop("device", None)
+    return _finish_user_login(args, client, creds)
 
 
 def cmd_auth_whoami(args: argparse.Namespace) -> Dict[str, Any]:
@@ -525,10 +571,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_login_url.add_argument("--scope", help="覆盖默认 OAuth scope")
     p_login_url.set_defaults(action="auth.login_url")
     p_login = auth_sub.add_parser(
-        "login", parents=[common], help="用授权码或用户令牌完成登录"
+        "login",
+        parents=[common],
+        help="飞书 Device Flow 登录（无需配置重定向 URL）",
     )
-    p_login.add_argument("--code", help="OAuth 回调中的 code")
+    p_login.add_argument("--code", help="兼容：授权码回调中的 code")
     p_login.add_argument("--redirect-uri", default=DEFAULT_REDIRECT_URI)
+    p_login.add_argument("--device-code", help="继续轮询已发起的 Device Flow")
+    p_login.add_argument("--scope", help="覆盖默认 OAuth scope")
+    p_login.add_argument("--no-wait", action="store_true", help="只返回登录链接，不轮询")
+    p_login.add_argument("--poll", action="store_true", help="轮询上次保存的 device_code")
+    p_login.add_argument("--wait-seconds", type=int, default=180, help="轮询最长秒数")
     p_login.set_defaults(action="auth.login")
     p_whoami = auth_sub.add_parser("whoami", parents=[common], help="查看当前登录用户")
     p_whoami.set_defaults(action="auth.whoami")
