@@ -27,8 +27,23 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from client import FeishuApiError, FeishuClient  # noqa: E402
+from credentials import (  # noqa: E402
+    clear_credentials,
+    credential_path,
+    load_credentials,
+    save_credentials,
+    token_expired,
+)
+from oauth import (  # noqa: E402
+    DEFAULT_REDIRECT_URI,
+    DEFAULT_SCOPES,
+    build_authorize_url,
+    exchange_code,
+    refresh_user_token,
+)
+from summary import collect_unread_window, render_markdown  # noqa: E402
 
-CLI_VERSION = "1.0.0"
+CLI_VERSION = "1.1.0"
 
 
 class CliError(ValueError):
@@ -116,16 +131,56 @@ def _load_content(args: argparse.Namespace) -> Any:
     raise CliError("请提供 --text、--content 或 --content-file")
 
 
+def _stored_user_token(args: argparse.Namespace) -> Optional[str]:
+    if getattr(args, "user_token", None):
+        return args.user_token
+    creds = load_credentials(getattr(args, "credentials", None))
+    token = creds.get("user_access_token")
+    return str(token) if token else None
+
+
+def _maybe_refresh_stored_token(args: argparse.Namespace, client: FeishuClient) -> None:
+    creds = load_credentials(getattr(args, "credentials", None))
+    if not creds.get("user_access_token"):
+        return
+    if not token_expired(creds):
+        client.set_user_token(str(creds["user_access_token"]))
+        return
+    refresh = creds.get("refresh_token")
+    if not refresh:
+        return
+    try:
+        token_info = refresh_user_token(client, str(refresh))
+    except FeishuApiError:
+        return
+    creds.update(token_info)
+    save_credentials(creds, getattr(args, "credentials", None))
+    client.set_user_token(str(token_info["user_access_token"]))
+
+
 def build_client(args: argparse.Namespace) -> FeishuClient:
-    return FeishuClient(
+    client = FeishuClient(
         app_id=getattr(args, "app_id", None),
         app_secret=getattr(args, "app_secret", None),
         tenant_access_token=getattr(args, "tenant_token", None),
-        user_access_token=getattr(args, "user_token", None),
+        user_access_token=_stored_user_token(args),
         base_url=getattr(args, "base_url", None),
         timeout=float(getattr(args, "timeout", 30.0)),
         prefer_user_token=bool(getattr(args, "use_user_token", False)),
     )
+    _maybe_refresh_stored_token(args, client)
+    return client
+
+
+def _public_user_profile(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    data = payload.get("data") or payload
+    return {
+        "name": data.get("name"),
+        "en_name": data.get("en_name"),
+        "open_id": data.get("open_id"),
+        "union_id": data.get("union_id"),
+        "tenant_key": data.get("tenant_key"),
+    }
 
 
 def cmd_version(_: argparse.Namespace) -> Dict[str, Any]:
@@ -142,7 +197,83 @@ def cmd_auth_status(args: argparse.Namespace) -> Dict[str, Any]:
     client = build_client(args)
     status = client.auth_status()
     status["app_id_masked"] = _mask_secret(client.app_id)
+    creds = load_credentials(getattr(args, "credentials", None))
+    status["has_stored_user_token"] = bool(creds.get("user_access_token"))
+    status["stored_user_expired"] = token_expired(creds) if creds else False
+    status["credentials_path"] = str(credential_path(getattr(args, "credentials", None)))
     return success("auth.status", status)
+
+
+def cmd_auth_login_url(args: argparse.Namespace) -> Dict[str, Any]:
+    client = build_client(args)
+    if not client.app_id:
+        raise CliError("生成登录链接需要 FEISHU_APP_ID / --app-id")
+    info = build_authorize_url(
+        app_id=client.app_id,
+        redirect_uri=args.redirect_uri,
+        scope=args.scope or DEFAULT_SCOPES,
+    )
+    info["setup"] = [
+        "在飞书开放平台「安全设置」添加重定向 URL: " + args.redirect_uri,
+        "开通并发布权限: im:chat:readonly, im:message:readonly, "
+        "im:message.p2p_msg:get_as_user, im:message.group_msg:get_as_user, offline_access",
+        "浏览器打开 authorize_url 并登录授权",
+        "从回调地址栏复制 code，执行: feishu_cli.py auth login --code <CODE>",
+    ]
+    return success("auth.login_url", info)
+
+
+def cmd_auth_login(args: argparse.Namespace) -> Dict[str, Any]:
+    client = build_client(args)
+    creds = load_credentials(getattr(args, "credentials", None))
+    if args.user_token:
+        creds["user_access_token"] = args.user_token
+        creds.pop("expires_at", None)
+    elif args.code:
+        token_info = exchange_code(
+            client, code=args.code, redirect_uri=args.redirect_uri
+        )
+        creds.update(token_info)
+        client.set_user_token(str(token_info["user_access_token"]))
+    else:
+        raise CliError("请提供 --code 或 --user-token；需要登录链接时用 auth login-url")
+
+    client.set_user_token(str(creds.get("user_access_token") or ""))
+    profile = {}
+    try:
+        profile = _public_user_profile(client.get_user_info())
+        creds.update({k: v for k, v in profile.items() if v})
+    except FeishuApiError as exc:
+        profile = {"warning": str(exc)}
+    path = save_credentials(creds, getattr(args, "credentials", None))
+    return success(
+        "auth.login",
+        {
+            "saved_to": str(path),
+            "user": profile,
+            "scope": creds.get("scope"),
+            "expires_at": creds.get("expires_at"),
+        },
+    )
+
+
+def cmd_auth_whoami(args: argparse.Namespace) -> Dict[str, Any]:
+    client = build_client(args)
+    if not client.auth_status().get("has_user_access_token"):
+        raise CliError("尚未登录，请先 auth login-url / auth login", "missing_user_token")
+    payload = client.get_user_info()
+    return success("auth.whoami", _public_user_profile(payload))
+
+
+def cmd_auth_logout(args: argparse.Namespace) -> Dict[str, Any]:
+    removed = clear_credentials(getattr(args, "credentials", None))
+    return success(
+        "auth.logout",
+        {
+            "removed": removed,
+            "credentials_path": str(credential_path(getattr(args, "credentials", None))),
+        },
+    )
 
 
 def cmd_auth_token(args: argparse.Namespace) -> Dict[str, Any]:
@@ -251,6 +382,52 @@ def cmd_user_get(args: argparse.Namespace) -> Dict[str, Any]:
     return success("user.get", payload.get("data") or payload)
 
 
+def cmd_summary_unread(args: argparse.Namespace) -> Dict[str, Any]:
+    client = build_client(args)
+    use_user = not bool(getattr(args, "allow_bot", False))
+    if use_user and not client.auth_status().get("has_user_access_token"):
+        raise CliError(
+            "总结未读需要用户登录。请先执行 auth login-url，授权后 auth login --code <CODE>",
+            "missing_user_token",
+        )
+    client.prefer_user_token = use_user
+
+    me_ids = set()
+    me_profile: Dict[str, Any] = {}
+    if use_user:
+        me_profile = _public_user_profile(client.get_user_info())
+        if me_profile.get("open_id"):
+            me_ids.add(str(me_profile["open_id"]))
+        if me_profile.get("union_id"):
+            me_ids.add(str(me_profile["union_id"]))
+    else:
+        bot = client.bot_info()
+        bot_data = bot.get("bot") or bot.get("data") or bot
+        me_profile = {
+            "name": bot_data.get("app_name"),
+            "open_id": bot_data.get("open_id"),
+            "mode": "bot",
+        }
+        if bot_data.get("open_id"):
+            me_ids.add(str(bot_data["open_id"]))
+
+    collected = collect_unread_window(
+        client,
+        me_ids=me_ids,
+        hours=args.hours,
+        max_chats=args.max_chats,
+        max_messages_per_chat=args.max_messages_per_chat,
+    )
+    collected["me"] = me_profile
+    collected["identity"] = "user" if use_user else "bot"
+    collected["related_count"] = len(collected.get("related") or [])
+    collected["others_count"] = len(collected.get("others") or [])
+    collected["markdown"] = render_markdown(collected)
+    if args.format == "markdown":
+        return success("summary.unread", {"markdown": collected["markdown"], "me": me_profile})
+    return success("summary.unread", collected)
+
+
 def cmd_api_call(args: argparse.Namespace) -> Dict[str, Any]:
     client = build_client(args)
     params = _load_json_value(args.params, flag="--params") if args.params else None
@@ -277,6 +454,11 @@ HANDLERS = {
     "version": cmd_version,
     "auth.status": cmd_auth_status,
     "auth.token": cmd_auth_token,
+    "auth.login_url": cmd_auth_login_url,
+    "auth.login": cmd_auth_login,
+    "auth.whoami": cmd_auth_whoami,
+    "auth.logout": cmd_auth_logout,
+    "summary.unread": cmd_summary_unread,
     "bot.info": cmd_bot_info,
     "chat.list": cmd_chat_list,
     "chat.get": cmd_chat_get,
@@ -302,12 +484,13 @@ def add_global_auth_flags(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--base-url", help="覆盖 OpenAPI Base URL")
     parser.add_argument("--timeout", type=float, default=30.0, help="请求超时秒数")
+    parser.add_argument("--credentials", help="用户令牌存储路径，默认 ~/.config/feishu-cli/credentials.json")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(
         prog="feishu_cli.py",
-        description="飞书 / Lark OpenAPI CLI（Bot 优先，支持用户令牌）",
+        description="飞书 / Lark OpenAPI CLI（Bot + 用户登录，支持 24 小时消息总结）",
     )
     add_global_auth_flags(parser)
 
@@ -335,6 +518,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="输出时遮蔽 token",
     )
     p_auth_token.set_defaults(action="auth.token")
+    p_login_url = auth_sub.add_parser(
+        "login-url", parents=[common], help="生成用户 OAuth 登录链接"
+    )
+    p_login_url.add_argument("--redirect-uri", default=DEFAULT_REDIRECT_URI)
+    p_login_url.add_argument("--scope", help="覆盖默认 OAuth scope")
+    p_login_url.set_defaults(action="auth.login_url")
+    p_login = auth_sub.add_parser(
+        "login", parents=[common], help="用授权码或用户令牌完成登录"
+    )
+    p_login.add_argument("--code", help="OAuth 回调中的 code")
+    p_login.add_argument("--redirect-uri", default=DEFAULT_REDIRECT_URI)
+    p_login.set_defaults(action="auth.login")
+    p_whoami = auth_sub.add_parser("whoami", parents=[common], help="查看当前登录用户")
+    p_whoami.set_defaults(action="auth.whoami")
+    p_logout = auth_sub.add_parser("logout", parents=[common], help="清除本地用户令牌")
+    p_logout.set_defaults(action="auth.logout")
+
+    summary = sub.add_parser("summary", parents=[common], help="消息总结")
+    summary_sub = summary.add_subparsers(dest="summary_command", required=True)
+    p_unread = summary_sub.add_parser(
+        "unread", parents=[common], help="总结近 N 小时未读/待处理消息"
+    )
+    p_unread.add_argument("--hours", type=int, default=24)
+    p_unread.add_argument("--max-chats", type=int, default=40)
+    p_unread.add_argument("--max-messages-per-chat", type=int, default=40)
+    p_unread.add_argument("--format", choices=["json", "markdown"], default="json")
+    p_unread.add_argument(
+        "--allow-bot",
+        action="store_true",
+        help="无用户登录时退化为总结机器人所在群（不是个人未读）",
+    )
+    p_unread.set_defaults(action="summary.unread")
 
     bot = sub.add_parser("bot", parents=[common], help="机器人信息")
     bot_sub = bot.add_subparsers(dest="bot_command", required=True)

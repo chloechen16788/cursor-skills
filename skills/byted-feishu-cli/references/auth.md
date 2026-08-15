@@ -27,6 +27,20 @@
 | Lark 国际版 | `export FEISHU_DOMAIN=lark` |
 | 自定义网关 | `export FEISHU_BASE_URL=https://example.com/open-apis` |
 
+## 用户登录（个人未读总结必需）
+
+1. 开放平台「安全设置」添加重定向 URL：`http://127.0.0.1:8765/callback`
+2. 开通并发布：`im:chat:readonly`、`im:message:readonly`、`im:message.p2p_msg:get_as_user`、`im:message.group_msg:get_as_user`、`offline_access`
+3. 生成链接并授权：
+
+```bash
+python3 scripts/feishu_cli.py auth login-url
+python3 scripts/feishu_cli.py auth login --code '<回调地址中的 code>'
+python3 scripts/feishu_cli.py auth whoami
+```
+
+用户令牌保存在 `~/.config/feishu-cli/credentials.json`（权限 600），不要提交到 git。
+
 ## 自检
 
 ```bash

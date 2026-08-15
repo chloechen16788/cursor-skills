@@ -11,6 +11,8 @@ export FEISHU_APP_SECRET="xxx"
 python3 scripts/feishu_cli.py auth status
 python3 scripts/feishu_cli.py bot info
 python3 scripts/feishu_cli.py chat list
+python3 scripts/feishu_cli.py auth login-url
+python3 scripts/feishu_cli.py summary unread --hours 24
 ```
 
 ## 依赖

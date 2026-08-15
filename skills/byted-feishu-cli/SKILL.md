@@ -1,12 +1,12 @@
 ---
 name: byted-feishu-cli
-version: 1.0.0
+version: 1.1.0
 metadata:
   author: volcengine-agentkit
 description: |
-  飞书 / Lark OpenAPI 命令行工具。用于机器人鉴权、查询 Bot 信息、管理群聊、收发与回复消息、查询用户，以及通用 OpenAPI 调用。
+  飞书 / Lark OpenAPI 命令行工具。用于机器人鉴权、用户 OAuth 登录、查询 Bot 信息、管理群聊、收发与回复消息、查询用户、通用 OpenAPI 调用，以及近 24 小时未读消息总结。
   当用户提到「飞书 CLI」「飞书机器人」「发飞书消息」「拉飞书群消息」「Lark bot」「feishu cli」或需要通过飞书开放平台执行 IM/通讯录操作时使用。
-  文档搜索请优先使用 byted-viking-aisearch-feishu。
+  文档搜索请优先使用 byted-viking-aisearch-feishu。未读总结也可使用 byted-feishu-summary。
 ---
 
 # 飞书 CLI
@@ -19,8 +19,9 @@ description: |
 
 | Skill | 能力 | 鉴权 |
 | --- | --- | --- |
-| **byted-feishu-cli（本 Skill）** | Bot/IM：鉴权、bot 信息、群聊、发消息、拉消息、用户查询、通用 API | 优先 `APP_ID` + `APP_SECRET` → `tenant_access_token` |
-| `byted-viking-aisearch-feishu` | 云文档 / 表格 / 多维表格 / Wiki **只读搜索与读取** | `LARK_USER_ACCESS_TOKEN`（用户 OAuth） |
+| **byted-feishu-cli（本 Skill）** | Bot/IM + 用户登录 + 24h 消息总结 | App 凭证；用户未读需 OAuth |
+| `byted-feishu-summary` | 未读总结的工作流封装（调用本 CLI） | 用户 OAuth |
+| `byted-viking-aisearch-feishu` | 云文档 / 表格 / 多维表格 / Wiki **只读搜索与读取** | `LARK_USER_ACCESS_TOKEN` |
 | `byted-volcengine-alert-inspection-analyzer` | 告警巡检分析流程（依赖宿主飞书拉消息工具） | 宿主注入 |
 
 IM、Bot、群消息走本 CLI；文档搜索继续用 `byted-viking-aisearch-feishu`。
@@ -48,6 +49,10 @@ IM、Bot、群消息走本 CLI；文档搜索继续用 `byted-viking-aisearch-fe
 python3 scripts/feishu_cli.py version
 python3 scripts/feishu_cli.py auth status
 python3 scripts/feishu_cli.py auth token --mask
+python3 scripts/feishu_cli.py auth login-url
+python3 scripts/feishu_cli.py auth login --code '<CODE>'
+python3 scripts/feishu_cli.py auth whoami
+python3 scripts/feishu_cli.py summary unread --hours 24
 python3 scripts/feishu_cli.py bot info
 python3 scripts/feishu_cli.py chat list --page-size 20
 python3 scripts/feishu_cli.py chat get --chat-id oc_xxx

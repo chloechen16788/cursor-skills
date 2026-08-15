@@ -399,3 +399,19 @@ class FeishuClient:
             f"/contact/v3/users/{parse.quote(user_id)}",
             params=params,
         )
+
+    def get_user_info(self) -> Dict[str, Any]:
+        if not self._user_token:
+            raise FeishuApiError(
+                "获取当前用户信息需要 user_access_token，请先执行 auth login",
+                code="missing_user_token",
+            )
+        previous = self.prefer_user_token
+        self.prefer_user_token = True
+        try:
+            return self.request("GET", "/authen/v1/user_info")
+        finally:
+            self.prefer_user_token = previous
+
+    def set_user_token(self, token: Optional[str]) -> None:
+        self._user_token = token

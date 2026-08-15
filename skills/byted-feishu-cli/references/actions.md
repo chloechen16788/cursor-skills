@@ -19,6 +19,11 @@
 | `version` | 本地 | 读 |
 | `auth status` | 本地 | 读 |
 | `auth token` | `POST /auth/v3/tenant_access_token/internal` | 读 |
+| `auth login-url` | 本地生成 OAuth URL | 读 |
+| `auth login` | `POST /authen/v2/oauth/token` | 读 |
+| `auth whoami` | `GET /authen/v1/user_info` | 读 |
+| `auth logout` | 本地删凭证 | 读 |
+| `summary unread` | 分页 `GET /im/v1/chats` + `GET /im/v1/messages` | 读 |
 | `bot info` | `GET /bot/v3/info` | 读 |
 | `chat list` | `GET /im/v1/chats` | 读 |
 | `chat get --chat-id` | `GET /im/v1/chats/:chat_id` | 读 |
