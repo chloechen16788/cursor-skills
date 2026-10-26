@@ -185,6 +185,211 @@ class CisionMentionsTest(unittest.TestCase):
         self.assertNotIn("FEISHU_CHAT_ID", export_source)
         self.assertNotIn("os.environ.get(\"FEISHU_CHAT", push_source)
         self.assertEqual(push_source.count("oc_27040b0dc3a733ab164199154c489fad"), 1)
+        self.assertEqual(feishu_push.BITABLE_SYNC_STREAM_ID, "1017610")
+        self.assertEqual(feishu_push.WIKI_NODE_TOKEN, "ODp7wESdDiXrHjk7tEPcsQrSn6d")
+        self.assertEqual(feishu_push.BITABLE_APP_TOKEN, "ByFgbm0xRaCBD2s8ohtcg0kgnWc")
+        self.assertEqual(feishu_push.BITABLE_TABLE_ID, "tblpvXJxxasNjP5e")
+        self.assertEqual(feishu_push.BITABLE_TABLE_NAME, "百度海外竞品最新数据")
+        self.assertNotIn("ByFgbm0xRaCBD2s8ohtcg0kgnWc", export_source)
+        self.assertNotIn("tblpvXJxxasNjP5e", export_source)
+        self.assertNotIn("--wiki", export_source)
+        self.assertNotIn("--table", export_source)
+        skill = (scripts.parent / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("`0 23 * * *`", skill)
+        self.assertIn("`30 10 * * *`", skill)
+        self.assertNotIn("07:05", skill)
+        self.assertNotIn("5 23", skill)
+
+    def test_bitable_sync_order_and_full_write(self) -> None:
+        import feishu_push
+
+        calls: list[object] = []
+
+        class Fake:
+            def list_fields(self) -> list[str]:
+                calls.append("fields")
+                return ["文本", "id", "title"]
+
+            def list_records(self) -> list[dict]:
+                calls.append("records")
+                return [
+                    {"record_id": "rec_old", "fields": {"id": [{"text": "10", "type": "text"}], "文本": "placeholder"}},
+                    {"record_id": "rec_blank", "fields": {"文本": "empty"}},
+                ]
+
+            def create_field(self, name: str) -> None:
+                calls.append(("field", name))
+
+            def ensure_name(self) -> None:
+                calls.append("name")
+
+            def delete_records(self, record_ids: list[str]) -> None:
+                calls.append(("delete", list(record_ids)))
+
+            def create_records(self, field_rows: list[dict]) -> None:
+                calls.append(("write", field_rows))
+
+        pushed: list[int] = []
+
+        def push(delta_path: Path, summary: dict) -> None:
+            pushed.append(summary["delta_rows"])
+            calls.append("push")
+            self.assertEqual(delta_path.read_text(encoding="utf-8"), "id,title\n12,new\n")
+
+        with tempfile.TemporaryDirectory(prefix="cision-mentions-") as temporary:
+            delta_path = Path(temporary) / "delta.csv"
+            summary = feishu_push.sync_1017610_baseline(
+                ["id", "title"],
+                [["10", "old"], ["12", "new"]],
+                delta_path,
+                {"delta_rows": 0},
+                client=Fake(),
+                push=push,
+            )
+        self.assertEqual(
+            calls,
+            ["fields", "records", "name", ("delete", ["rec_old", "rec_blank"]), ("write", [{"id": "10", "title": "old"}, {"id": "12", "title": "new"}]), "push"],
+        )
+        self.assertEqual(pushed, [1])
+        self.assertEqual(summary["bitable_written"], 2)
+        self.assertEqual(summary["bitable_deleted"], 2)
+        self.assertEqual(summary["previous_ids"], 1)
+        self.assertEqual(summary["feishu"], "sent")
+
+    def test_bitable_read_failure_does_not_delete(self) -> None:
+        import feishu_push
+
+        class Fake:
+            def list_fields(self) -> list[str]:
+                raise RuntimeError("HTTP 403")
+
+            def list_records(self) -> list[dict]:
+                raise AssertionError("不应继续读记录")
+
+            def delete_records(self, record_ids: list[str]) -> None:
+                raise AssertionError("不应删除")
+
+            def create_records(self, field_rows: list[dict]) -> None:
+                raise AssertionError("不应写入")
+
+            def create_field(self, name: str) -> None:
+                raise AssertionError("不应建字段")
+
+            def ensure_name(self) -> None:
+                raise AssertionError("不应改表名")
+
+        def push(delta_path: Path, summary: dict) -> None:
+            raise AssertionError("不应推送")
+
+        with self.assertRaises(RuntimeError):
+            feishu_push.sync_1017610_baseline(["id"], [["1"]], Path("/tmp/ignored-delta.csv"), {}, client=Fake(), push=push)
+
+    def test_missing_id_field_means_full_delta(self) -> None:
+        import feishu_push
+
+        written: list[dict] = []
+
+        class Fake:
+            def list_fields(self) -> list[str]:
+                return ["文本"]
+
+            def list_records(self) -> list[dict]:
+                return [{"record_id": "rec_placeholder", "fields": {"文本": "占位"}}]
+
+            def create_field(self, name: str) -> None:
+                return None
+
+            def ensure_name(self) -> None:
+                return None
+
+            def delete_records(self, record_ids: list[str]) -> None:
+                self.deleted = record_ids
+
+            def create_records(self, field_rows: list[dict]) -> None:
+                written.extend(field_rows)
+
+        fake = Fake()
+
+        def push(delta_path: Path, summary: dict) -> None:
+            self.assertEqual(summary["delta_rows"], 1)
+
+        with tempfile.TemporaryDirectory(prefix="cision-mentions-") as temporary:
+            summary = feishu_push.sync_1017610_baseline(
+                ["id"],
+                [["99"]],
+                Path(temporary) / "delta.csv",
+                {},
+                client=fake,
+                push=push,
+            )
+        self.assertEqual(fake.deleted, ["rec_placeholder"])
+        self.assertEqual(written, [{"id": "99"}])
+        self.assertEqual(summary["previous_ids"], 0)
+        self.assertFalse(summary["previous_exists"])
+
+    def test_1017610_does_not_write_latest_csv(self) -> None:
+        import export_mentions
+
+        def fetch(page_no: int, page_size: int, after: str, before: str) -> str:
+            if page_no == 1:
+                return page("id,title", "10,one")
+            return "id,title\n"
+
+        def sync(header: list[str], rows: list[list[str]], delta_path: Path, summary: dict) -> dict:
+            cision_lib.write_csv(delta_path, header, rows)
+            updated = dict(summary)
+            updated["delta_rows"] = len(rows)
+            updated["previous_ids"] = 0
+            updated["previous_exists"] = False
+            updated["feishu"] = "sent"
+            updated["bitable_deleted"] = 5
+            updated["bitable_written"] = len(rows)
+            updated["dedup"] = "bitable"
+            return updated
+
+        with tempfile.TemporaryDirectory(prefix="cision-mentions-") as temporary:
+            root = Path(temporary) / "out"
+            now = datetime(2026, 10, 26, 18, 30, tzinfo=SHANGHAI)
+            summary = export_mentions.run_export(
+                stream_id="1017610",
+                output_dir=root,
+                fetch_page=fetch,
+                page_size=10,
+                push_feishu=False,
+                now=now,
+                sync=sync,
+            )
+            self.assertFalse((root / "state" / "1017610" / "latest.csv").exists())
+            self.assertEqual(summary["full_rows"], 1)
+            self.assertEqual(summary["bitable_written"], 1)
+            self.assertTrue((root / "runs" / "1017610").exists())
+
+    def test_other_stream_still_uses_latest_csv(self) -> None:
+        import export_mentions
+
+        def fetch(page_no: int, page_size: int, after: str, before: str) -> str:
+            if page_no == 1:
+                return page("id,title", "10,one")
+            return "id,title\n"
+
+        def sync(*args, **kwargs):
+            raise AssertionError("其他 stream 不应同步多维表格")
+
+        with tempfile.TemporaryDirectory(prefix="cision-mentions-") as temporary:
+            root = Path(temporary) / "out"
+            now = datetime(2026, 10, 26, 18, 30, tzinfo=SHANGHAI)
+            summary = export_mentions.run_export(
+                stream_id="8",
+                output_dir=root,
+                fetch_page=fetch,
+                page_size=10,
+                push_feishu=False,
+                now=now,
+                sync=sync,
+            )
+            self.assertEqual(cision_lib.load_previous_ids(root / "state" / "8" / "latest.csv"), {"10"})
+            self.assertEqual(summary["delta_rows"], 1)
+            self.assertEqual(summary["feishu"], "skipped")
 
     def test_commands_stay_separate(self) -> None:
         scripts = Path(__file__).resolve().parent

@@ -72,7 +72,9 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 3. 再写 `runs/{streamId}/{窗口}/delta.csv`，只保留 `id` 不在上一份全量里的行。空 id 的行留在增量里。
 4. 用本次全量替换 `state/{streamId}/latest.csv`，下一次用它做比较。
 
-要求推送飞书时，推送成功之后才替换 `latest.csv`。推送失败则保留原来的 `latest.csv`，同一窗口重跑仍会把这些行算进增量。未要求推送时，写出 delta 后立刻替换。
+其他 stream：要求推送飞书时，推送成功之后才替换 `latest.csv`。推送失败则保留原来的 `latest.csv`。未要求推送时，写出 delta 后立刻替换。
+
+`1017610` 不读、不写 `latest.csv`。每次导出都按下一节同步多维表格，并用表里的 `id` 计算增量。
 
 ## 输出目录
 
@@ -82,9 +84,11 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 
 可用环境变量 `CISION_OUTPUT_DIR` 或参数 `--output-dir` 改位置。脚本发现目录落在 git 工作区里会直接退出。仓库 `.gitignore` 里另有 `cision-mentions-output/`，避免有人把输出指到这个名字下后又提交。不要提交这些 CSV。
 
-同一个 stream 的稳定基线是：
+除 stream `1017610` 外，稳定基线是：
 
 `~/.local/share/cision-mentions/state/{streamId}/latest.csv`
+
+`1017610` 不用这个文件。它的基线是下面那张飞书多维表格里的 `id` 列。
 
 ## 飞书推送
 
@@ -93,21 +97,48 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
 
-这两个名字已经作为 Runtime Secret 保存在本云环境。脚本只在当前进程看得到它们时才读取。若这次虚拟机是在保存密钥之前启动的，进程里会是未设置；列表和导出不因此失败，也不要向用户索要粘贴。Runtime Secret 在 cloud agent 启动时注入，不写进环境快照，所以不需要、也不要为了注入它们去重建环境。使用本环境新开的一次 cloud agent 运行可以读到这两个变量。
+这两个名字已经作为 Runtime Secret 保存在本云环境。脚本只在当前进程看得到它们时才读取。若这次虚拟机是在保存密钥之前启动的，进程里会是未设置。这时列出 streams、以及导出除 `1017610` 以外的 stream 仍可进行；`1017610` 的多维表格同步不会执行，也不要向用户索要粘贴。Runtime Secret 在 cloud agent 启动时注入，不写进环境快照，所以不需要、也不要为了注入它们去重建环境。使用本环境新开的一次 cloud agent 运行可以读到这两个变量。
 
 推送只发到写死的群 `oc_27040b0dc3a733ab164199154c489fad`（`receive_id_type=chat_id`）。没有环境变量，也没有命令行参数可以改到别的群或私聊。
 
 ```bash
-python3 .cursor/skills/cision-mentions/scripts/export_mentions.py \
-  --stream-id 1017610 \
-  --push-feishu
+python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 1017610
 ```
 
-实际调用顺序：
+`1017610` 不需要 `--push-feishu`。同步写完表之后会把增量 CSV 推到上面那个群。其他 stream 仍要加 `--push-feishu` 才会推群，并且继续用本地 `latest.csv` 去重。
 
-1. `POST https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal`，用 app id 和 app secret 换 `tenant_access_token`。不打印这个 token。
-2. `POST /open-apis/im/v1/messages` 发一条文本，只含 stream id、UTC 窗口和行数。不含 mention 标题或正文。
-3. 增量有数据行时，再 `POST /open-apis/im/v1/files`（`file_type=stream`）上传 delta CSV，并用 `msg_type=file` 发出。增量为空时只发文本。
+## 多维表格（仅 1017610）
+
+标识写死，没有命令行参数或环境变量可以改到别的 wiki、表或群：
+
+- wiki：`https://prnewswire.feishu.cn/wiki/ODp7wESdDiXrHjk7tEPcsQrSn6d`
+- wiki node token：`ODp7wESdDiXrHjk7tEPcsQrSn6d`
+- 多维表格 app token：`ByFgbm0xRaCBD2s8ohtcg0kgnWc`
+- table id：`tblpvXJxxasNjP5e`
+- 表名：`百度海外竞品最新数据`
+
+接口直接用这个 app token 和 table id，不会再根据 wiki 节点临时解析出另一张表。表里原来的文本字段 `文本` 和占位行会保留字段、删掉占位记录。每个 CSV 列若还没有同名文本字段就新建，mention id 的字段名必须是 `id`。
+
+每次导出 `1017610`，顺序固定：
+
+1. 先读字段 `id` 的全部已有值。读取失败就停止，不删除任何记录。
+2. 用这些 id 算增量。没有 `id` 字段，或表是空的，就视为没有上一份 id，增量等于本次全量。
+3. 删掉表里的每一条记录。
+4. 把本次窗口的全量写成记录，一行 mention 一条，不是只写增量。
+5. 再把增量 CSV 推到群 `oc_27040b0dc3a733ab164199154c489fad`。
+
+推送发生在写入之后。推送失败不会把表改回去，下一次增量会拿这次全量做比较。
+
+应用还需要能读字段、建文本字段、读记录、删记录、建记录。把应用加为该多维表格的协作者。
+
+飞书接口顺序：
+
+1. `POST /open-apis/auth/v3/tenant_access_token/internal` 换 `tenant_access_token`。不打印这个 token。
+2. `GET /open-apis/bitable/v1/apps/{app}/tables/{table}/fields` 和 `.../records`。失败则停止。
+3. 缺列时 `POST .../fields`（`type=1` 文本）。表名不一致时 `PUT .../tables/{table}`。这一步失败也不删除。
+4. `POST .../records/batch_delete` 删掉全部记录。
+5. `POST .../records/batch_create` 写入本次全量。
+6. `POST /open-apis/im/v1/messages` 发一条只有行数的文本。增量有数据行时再 `POST /open-apis/im/v1/files` 上传 delta CSV，并用 `msg_type=file` 发出。
 
 用户需要自己在飞书开放平台准备：
 
@@ -124,15 +155,15 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py \
 
 **Cursor 云端，已在文档里确认的部分。** [Automations](https://cursor.com/docs/cloud-agent/automations) 可以按预设或 cron 启动 cloud agent。用户必须自己创建并启用，地址是 [cursor.com/automations](https://cursor.com/automations)，也可以在 Agents 窗口里建。创建时要：
 
-1. 触发器选 Scheduled，cron 填 `0 23 * * *`。Automations 的 cron 按 UTC 计算，这是上海时间每天正好 07:00。数据窗口仍是昨天 07:00（含）到今天 07:00（不含），不要改窗口。文档写明可以延迟触发，但不会早于设定时间开始。
+1. 触发器选 Scheduled，加两条 cron。Automations 的 cron 按 UTC 计算。`0 23 * * *` 是上海时间每天正好 07:00，`30 10 * * *` 是上海时间每天正好 18:30。两条都跑同一条导出命令。数据窗口都是昨天 07:00（含）到今天 07:00（不含），不要改窗口。文档写明可以延迟触发，但不会早于设定时间开始。
 2. 选中本仓库。cron 类触发器默认可以不带仓库；不带仓库时 agent 拿不到这份脚本。
-3. 提示词写明运行 `export_mentions.py --stream-id <id>`，并且不要打印 token 和 mention 内容。需要推送时只加 `--push-feishu`。目标群已经写死，不要再传 chat id。
+3. 提示词写明运行 `export_mentions.py --stream-id 1017610`，并且不要打印 token 和 mention 内容。这个 stream 会自己同步多维表格并推送增量，不要再传 chat id、wiki 或 table id。其他 stream 需要推群时才加 `--push-feishu`。
 4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。新的 cloud agent 在启动时会注入它们，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
 
 **文档没有保证、因此这里不当作已支持能力的部分。**
 
 - 同一次论坛线索提到，带有 “Skip Install” 的旧自动化可能拿不到环境变量。创建后只核对注入的变量名，不要打印值。
-- 云端每次定时都会新开一次 cloud agent。环境快照保留的是构建好的依赖和仓库，不是上一次写到 `~/.local/share/cision-mentions` 的 CSV。文档里的 Memories 是跨次笔记，不是这个 CSV 基线，本技能也不会把 mention 内容写进 Memories。因此云端定时跑这条命令时，通常没有上一份 `latest.csv`，增量会等于当次全量。跨次去重要在家目录会保留的机器上跑。
+- 云端每次定时都会新开一次 cloud agent。环境快照不保留 `latest.csv`。`1017610` 的去重基线在飞书多维表格里，两次云端运行可以对着同一张表。其他 stream 仍靠本机 `latest.csv`；云端没有这份文件时，增量等于当次全量。Memories 不是 CSV 基线，本技能也不会把 mention 内容写进去。
 - Automations 自带 Slack 等工具，没有飞书推送工具。飞书只能走本脚本和上面的两个环境变量。
 - 本仓库不提供笔记本 crontab。同一台磁盘不重置的机器上，用户可以自行用系统 cron 调用导出命令，那样 `latest.csv` 才能留给下一次。
 

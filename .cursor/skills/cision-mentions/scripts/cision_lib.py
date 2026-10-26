@@ -343,19 +343,22 @@ def fetch_mentions_page(stream_id: str, page: int, page_size: int, after: str, b
 
 def format_summary(summary: dict) -> str:
     previous = "yes" if summary["previous_exists"] else "no"
-    return "\n".join(
-        [
-            f"stream_id={summary['stream_id']}",
-            f"after={summary['after']}",
-            f"before={summary['before']}",
-            f"pages={summary['pages']}",
-            f"full_rows={summary['full_rows']}",
-            f"previous_exists={previous}",
-            f"previous_ids={summary['previous_ids']}",
-            f"delta_rows={summary['delta_rows']}",
-            f"full_csv={summary['full_csv']}",
-            f"delta_csv={summary['delta_csv']}",
-            f"latest_csv={summary['latest_csv']}",
-            f"feishu={summary['feishu']}",
-        ]
-    )
+    lines = [
+        f"stream_id={summary['stream_id']}",
+        f"after={summary['after']}",
+        f"before={summary['before']}",
+        f"pages={summary['pages']}",
+        f"full_rows={summary['full_rows']}",
+        f"previous_exists={previous}",
+        f"previous_ids={summary['previous_ids']}",
+        f"delta_rows={summary['delta_rows']}",
+        f"full_csv={summary['full_csv']}",
+        f"delta_csv={summary['delta_csv']}",
+        f"latest_csv={summary['latest_csv']}",
+    ]
+    if "bitable_written" in summary:
+        lines.append(f"dedup={summary.get('dedup', 'bitable')}")
+        lines.append(f"bitable_deleted={summary['bitable_deleted']}")
+        lines.append(f"bitable_written={summary['bitable_written']}")
+    lines.append(f"feishu={summary['feishu']}")
+    return "\n".join(lines)
