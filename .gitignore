@@ -214,3 +214,6 @@ docs/node_modules/
 .trae/
 .zip
 .agent
+
+# Cision mention CSV exports. Default output is ~/.local/share/cision-mentions.
+cision-mentions-output/
