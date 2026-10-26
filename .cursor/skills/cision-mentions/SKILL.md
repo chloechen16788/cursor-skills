@@ -117,7 +117,7 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 - table id：`tblpvXJxxasNjP5e`
 - 表名：`百度海外竞品最新数据`
 
-接口直接用这个 app token 和 table id，不会再根据 wiki 节点临时解析出另一张表。表里原来的文本字段 `文本` 和占位行会保留字段、删掉占位记录。每个 CSV 列若还没有同名文本字段就新建，mention id 的字段名必须是 `id`。
+这个 app token 就是 wiki 节点 `GET /open-apis/wiki/v2/spaces/get_node` 返回的 `obj_token`（`obj_type=bitable`）。当前两者相同，接口直接用这个 app token 和 table id。嵌入知识库的多维表格如果 app token 和 `obj_token` 不一致，必须用 `obj_token` 调 `/bitable/v1/apps/{token}`，否则会 404。表里原来的文本字段 `文本` 和占位行会保留字段、删掉占位记录。每个 CSV 列若还没有同名文本字段就新建，mention id 的字段名必须是 `id`。
 
 每次导出 `1017610`，顺序固定：
 
@@ -135,7 +135,7 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 
 1. `POST /open-apis/auth/v3/tenant_access_token/internal` 换 `tenant_access_token`。不打印这个 token。
 2. `GET /open-apis/bitable/v1/apps/{app}/tables/{table}/fields` 和 `.../records`。失败则停止。
-3. 缺列时 `POST .../fields`（`type=1` 文本）。表名不一致时 `PUT .../tables/{table}`。这一步失败也不删除。
+3. 缺列时 `POST .../fields`（`type=1` 文本）。表名不一致时 `PATCH .../tables/{table}`，请求体只有 `name`。不要用 `PUT`：同一路径会返回 HTTP 404，正文是 `404 page not found`，此时还没有删记录。这一步失败也不删除。
 4. `POST .../records/batch_delete` 删掉全部记录。
 5. `POST .../records/batch_create` 写入本次全量。
 6. `POST /open-apis/im/v1/messages` 发一条只有行数的文本。增量有数据行时再 `POST /open-apis/im/v1/files` 上传 delta CSV，并用 `msg_type=file` 发出。

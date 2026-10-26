@@ -22,6 +22,7 @@ FEISHU_RECEIVE_ID_TYPE = "chat_id"
 BITABLE_SYNC_STREAM_ID = "1017610"
 WIKI_URL = "https://prnewswire.feishu.cn/wiki/ODp7wESdDiXrHjk7tEPcsQrSn6d"
 WIKI_NODE_TOKEN = "ODp7wESdDiXrHjk7tEPcsQrSn6d"
+# 已用 wiki get_node 核对：该节点 obj_type=bitable，obj_token 就是这个值。改表名必须 PATCH；PUT 会得到纯文本 404 page not found。
 BITABLE_APP_TOKEN = "ByFgbm0xRaCBD2s8ohtcg0kgnWc"
 BITABLE_TABLE_ID = "tblpvXJxxasNjP5e"
 BITABLE_TABLE_NAME = "百度海外竞品最新数据"
@@ -177,6 +178,12 @@ def push_delta(delta_path: Path, summary: dict) -> None:
         _send_message(token, "file", {"file_key": file_key})
 
 
+def _open_api_path(url: str) -> str:
+    marker = "/open-apis"
+    index = url.find(marker)
+    return url[index:] if index >= 0 else url
+
+
 def _request(url: str, method: str, payload: dict | None = None, token: str | None = None) -> dict:
     headers: dict[str, str] = {}
     data = None
@@ -191,7 +198,8 @@ def _request(url: str, method: str, payload: dict | None = None, token: str | No
             raw = response.read()
     except HTTPError as error:
         raw = error.read() if error.fp is not None else b""
-        raise RuntimeError(_error_fields(raw, error.code)) from None
+        detail = _error_fields(raw, error.code)
+        raise RuntimeError(f"{method} {_open_api_path(url)}：{detail}") from None
     except URLError as error:
         raise RuntimeError(f"飞书请求失败：{error.reason}") from None
     try:
@@ -318,7 +326,8 @@ class FeishuBitable:
             raise RuntimeError("写死的 table id 不在该多维表格里")
         if current == BITABLE_TABLE_NAME:
             return
-        _request(self._url(""), "PUT", {"name": BITABLE_TABLE_NAME}, token=self._bearer())
+        # 更新数据表只有 PATCH。PUT 同一路径会返回 HTTP 404，正文是「404 page not found」。
+        _request(self._url(""), "PATCH", {"name": BITABLE_TABLE_NAME}, token=self._bearer())
 
     def delete_records(self, record_ids: list[str]) -> None:
         for start in range(0, len(record_ids), BITABLE_BATCH):

@@ -199,6 +199,34 @@ class CisionMentionsTest(unittest.TestCase):
         self.assertIn("`30 10 * * *`", skill)
         self.assertNotIn("07:05", skill)
         self.assertNotIn("5 23", skill)
+        self.assertIn('"PATCH"', push_source)
+        self.assertNotIn('"PUT"', push_source)
+        self.assertIn("PATCH", skill)
+        self.assertNotIn("`PUT .../tables/{table}`", skill)
+
+    def test_table_rename_uses_patch(self) -> None:
+        import feishu_push
+
+        calls: list[tuple[str, dict | None]] = []
+        original = feishu_push._request
+
+        def fake_request(url: str, method: str, payload: dict | None = None, token: str | None = None) -> dict:
+            calls.append((method, payload))
+            self.assertIn("/tables/" + feishu_push.BITABLE_TABLE_ID, url)
+            return {"code": 0, "data": {}}
+
+        feishu_push._request = fake_request
+        try:
+            client = feishu_push.FeishuBitable()
+            client._bearer = lambda: "token"  # type: ignore[method-assign]
+            client._get_data = lambda url: {  # type: ignore[method-assign]
+                "items": [{"table_id": feishu_push.BITABLE_TABLE_ID, "name": "数据表"}],
+                "has_more": False,
+            }
+            client.ensure_name()
+        finally:
+            feishu_push._request = original
+        self.assertEqual(calls, [("PATCH", {"name": feishu_push.BITABLE_TABLE_NAME})])
 
     def test_bitable_sync_order_and_full_write(self) -> None:
         import feishu_push
