@@ -124,14 +124,13 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py \
 
 **Cursor 云端，已在文档里确认的部分。** [Automations](https://cursor.com/docs/cloud-agent/automations) 可以按预设或 cron 启动 cloud agent。用户必须自己创建并启用，地址是 [cursor.com/automations](https://cursor.com/automations)，也可以在 Agents 窗口里建。创建时要：
 
-1. 触发器选 Scheduled（预设或 cron）。文档写明可以延迟触发，但不会早于设定时间开始。
+1. 触发器选 Scheduled，cron 填 `0 23 * * *`。Automations 的 cron 按 UTC 计算，这是上海时间每天正好 07:00。数据窗口仍是昨天 07:00（含）到今天 07:00（不含），不要改窗口。文档写明可以延迟触发，但不会早于设定时间开始。
 2. 选中本仓库。cron 类触发器默认可以不带仓库；不带仓库时 agent 拿不到这份脚本。
 3. 提示词写明运行 `export_mentions.py --stream-id <id>`，并且不要打印 token 和 mention 内容。需要推送时只加 `--push-feishu`。目标群已经写死，不要再传 chat id。
 4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。新的 cloud agent 在启动时会注入它们，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
 
 **文档没有保证、因此这里不当作已支持能力的部分。**
 
-- Automations 文档页面没有写 cron 的时区。论坛里 Cursor 员工说按 UTC 计算，并提到也许可以加 `CRON_TZ=Asia/Shanghai` 前缀（[讨论](https://forum.cursor.com/t/automations-show-human-readable-description-for-cron-schedules/164058)）。这只是论坛回复，不是文档承诺。若按该回复的 UTC 理解，上海时间每天 07:05 对应 cron `5 23 * * *`。
 - 同一次论坛线索提到，带有 “Skip Install” 的旧自动化可能拿不到环境变量。创建后只核对注入的变量名，不要打印值。
 - 云端每次定时都会新开一次 cloud agent。环境快照保留的是构建好的依赖和仓库，不是上一次写到 `~/.local/share/cision-mentions` 的 CSV。文档里的 Memories 是跨次笔记，不是这个 CSV 基线，本技能也不会把 mention 内容写进 Memories。因此云端定时跑这条命令时，通常没有上一份 `latest.csv`，增量会等于当次全量。跨次去重要在家目录会保留的机器上跑。
 - Automations 自带 Slack 等工具，没有飞书推送工具。飞书只能走本脚本和上面的两个环境变量。
