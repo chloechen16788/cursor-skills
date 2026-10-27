@@ -318,9 +318,9 @@ def scrape_one(url: str, dest: Path) -> dict:
     return {"markdown": text, "error": ""}
 
 
-def scrape_urls(urls: list[str], workdir: Path, workers: int = 8) -> dict[str, dict]:
-    if workers < 1 or workers > 20:
-        raise RuntimeError("workers 必须在 1 到 20 之间")
+def scrape_urls(urls: list[str], workdir: Path, workers: int = 45) -> dict[str, dict]:
+    if workers < 1 or workers > 45:
+        raise RuntimeError("workers 必须在 1 到 45 之间")
     workdir.mkdir(parents=True, exist_ok=True)
     if not urls:
         return {}
@@ -456,7 +456,7 @@ def run_delta_file(
     delta_path: Path,
     *,
     after: str = "",
-    workers: int = 8,
+    workers: int = 45,
     workdir: Path | None = None,
 ) -> dict:
     header, rows = load_delta(delta_path)

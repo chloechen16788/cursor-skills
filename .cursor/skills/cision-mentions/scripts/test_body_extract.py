@@ -259,6 +259,33 @@ class BodyExtractTest(unittest.TestCase):
         self.assertEqual(body_extract.after_from_delta_path(delta), AFTER)
         self.assertEqual(body_extract.bodies_xlsx_path(delta).name, "delta-bodies.xlsx")
 
+    def test_scrape_workers_default_and_maximum_are_45(self) -> None:
+        import inspect
+
+        self.assertEqual(
+            inspect.signature(body_extract.scrape_urls).parameters["workers"].default,
+            45,
+        )
+        self.assertEqual(
+            inspect.signature(body_extract.run_delta_file).parameters["workers"].default,
+            45,
+        )
+        extract = (SCRIPTS / "extract_bodies.py").read_text(encoding="utf-8")
+        self.assertIn(
+            'default=45, help="同时抓取的 URL 数，1 到 45"',
+            extract,
+        )
+        with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
+            workdir = Path(temporary)
+            for allowed in (1, 20, 45):
+                self.assertEqual(
+                    body_extract.scrape_urls([], workdir, workers=allowed), {}
+                )
+            for rejected in (0, 46):
+                with self.assertRaises(RuntimeError) as caught:
+                    body_extract.scrape_urls([], workdir, workers=rejected)
+                self.assertEqual(str(caught.exception), "workers 必须在 1 到 45 之间")
+
     def test_scrape_uses_only_main_content_and_not_api_key_flag(self) -> None:
         import body_extract as module
 
