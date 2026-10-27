@@ -1,6 +1,6 @@
 ---
 name: cision-mentions
-description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间昨天 07:00 至今天 07:00 拉取 CSV、与上次全量去重，并推送增量。stream 1017610 在同一次运行里、增量非空时，接着用 Firecrawl 抓取并用模型清洗正文，写入当日多维表格。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
+description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间昨天 07:00 至今天 07:00 拉取 CSV、与上次全量去重，并推送增量。stream 1017610 在同一次运行里、增量非空时，接着用 Firecrawl 抓取正文，标题用 CSV，正文保存整段 markdown，写入当日多维表格。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
 ---
 
 # Cision mentions 导出
@@ -10,7 +10,7 @@ description: 导出 Cision / Streem mentions。列出监测流的 id 与 label�
 - 列出账号下的 Mention Stream，只打印 `id` 和 `label`。
 - 已有 stream id 时，导出该流在固定时间窗内的 mentions CSV，并与上一份全量去重。
 - 两条命令分开调用。导出 mentions 时不要先调用列表接口。
-- stream `1017610` 的同一次运行里，导出完成且 `delta_rows` 大于 0 之后，再抓取并清洗正文，写入当日表。增量为 0 则停，不抓取，也不再发一条消息。
+- stream `1017610` 的同一次运行里，导出完成且 `delta_rows` 大于 0 之后，再抓取正文，写入当日表。增量为 0 则停，不抓取，也不再发一条消息。
 
 基址是 `https://api.cision.one`。认证用请求头 `X-Auth-Token`，值只从环境变量 `CISION_API_TOKEN` 读取。不要把 token 放到命令行参数里，不要打印它，也不要写进日志。
 
@@ -162,11 +162,11 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 
 抓取在脚本里成批进行，调用 PATH 上的 `firecrawl scrape --only-main-content`。找不到命令时，和缺密钥一样，在删除之前停止。不要让 agent 每个 URL 单独开一轮。以后会有几百条 URL。密钥只从环境变量 `FIRECRAWL_API_KEY` 读取，不要写进命令行。
 
-清洗不是正则，也不是脚本里的规则。脚本把整段抓取 markdown 和一段判断提示交给模型。模型决定标题在哪里、标题下面的正文从哪里开始、留下哪些字，并去掉导航、广告、相关链接和 markdown 链接语法。脚本只解析模型返回的 JSON（`title`、`body`）并原样保存。
+不做模型清洗。`标题` 用 CSV 的 `title`。`正文` 保存 Firecrawl 返回的整段 markdown，脚本不删导航、不改写、不摘要，避免后面再抽取时丢掉原文。单条超过飞书单元格上限时只截断到上限，并在 `错误` 里注明。
 
-某一条 URL 抓取或模型失败时，这一行仍写入：正文为空，`错误` 写原因，`标题` 暂用 CSV 里的标题。其他行照常写入。只要当日表写入成功，就向群发链接。
+某一条 URL 抓取失败时，这一行仍写入：正文为空，`错误` 写原因，`标题` 仍用 CSV 里的标题。其他行照常写入。只要当日表写入成功，就向群发链接。
 
-写入前如果没有 `FIRECRAWL_API_KEY`，或者没有模型密钥（`ARTICLE_MODEL_API_KEY` 或 `OPENAI_API_KEY`），立刻停止，不要删除飞书记录。模型请求默认发到 OpenAI 兼容的 `https://api.openai.com/v1/chat/completions`，可用 `ARTICLE_MODEL_BASE_URL` 和 `ARTICLE_MODEL` 改。不要把这些密钥打进命令行。
+写入前如果没有 `FIRECRAWL_API_KEY`，立刻停止，不要删除飞书记录。不要把密钥打进命令行。
 
 当日表标识写死：
 
@@ -182,7 +182,7 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 顺序固定：
 
 1. 确认密钥。缺失则停止，不删除。
-2. 按 url 去重后抓取，并把每篇 markdown 交给模型。单条失败只记在该行。
+2. 按 url 去重后抓取。正文保存整段 markdown。单条失败只记在该行。
 3. 解析 wiki，补齐字段。这一步失败则不删除。
 4. 删除当日表里的全部记录。
 5. 只写入这一次的新行。表里必须只剩这一批，不要追加。
@@ -201,7 +201,7 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 1. 触发器选 Scheduled。07:00 那套只用 `0 23 * * *`，18:30 那套只用 `30 10 * * *`。Automations 的 cron 按 UTC 计算。数据窗口都是昨天 07:00（含）到今天 07:00（不含），不要改窗口。文档写明可以延迟触发，但不会早于设定时间开始。
 2. 选中本仓库。cron 类触发器默认可以不带仓库；不带仓库时 agent 拿不到这份脚本。
 3. 提示词先运行 `export_mentions.py --stream-id 1017610`。看标准输出的 `delta_rows`。等于 0 就停，不要抓正文，不要发第二条消息。大于 0 时，用同一次输出的 `delta_csv` 和 `after` 运行 `extract_bodies.py`。不要逐条 URL 另开对话。不要打印 token、密钥或 mention 正文。不要再传 chat id、wiki 或 table id。其他 stream 需要推群时才给导出命令加 `--push-feishu`，并且不要跑正文脚本。
-4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。正文步骤还要 `FIRECRAWL_API_KEY`，以及 `ARTICLE_MODEL_API_KEY` 或 `OPENAI_API_KEY`。缺抓取密钥或缺模型密钥时，脚本在删除当日表之前停止。新的 cloud agent 在启动时会注入已保存的 Runtime Secret，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
+4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。正文步骤还要 `FIRECRAWL_API_KEY`。缺抓取密钥时，脚本在删除当日表之前停止。新的 cloud agent 在启动时会注入已保存的 Runtime Secret，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
 
 **文档没有保证、因此这里不当作已支持能力的部分。**
 
@@ -212,8 +212,8 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 
 ## 禁止事项
 
-- 不要把 `CISION_API_TOKEN`、`FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FIRECRAWL_API_KEY`、`ARTICLE_MODEL_API_KEY`、`OPENAI_API_KEY` 或 tenant access token 打进命令行、日志、提交或对话。
+- 不要把 `CISION_API_TOKEN`、`FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FIRECRAWL_API_KEY` 或 tenant access token 打进命令行、日志、提交或对话。
 - 不要提交 `full.csv`、`delta.csv`、`latest.csv` 或任何 mention 导出。
 - 汇报结果时只给行数、窗口和路径，不粘贴 mention 标题或正文。
 - 不要把正文文件发到群里，也不要发到 `oc_27040b0dc3a733ab164199154c489fad` 以外的会话。
-- 不要逐条 URL 让 agent 循环。抓取和模型调用都在 `extract_bodies.py` 里完成。
+- 不要逐条 URL 让 agent 循环。抓取在 `extract_bodies.py` 里完成。

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""正文清洗交给模型。单测可以替模型回一段记录好的回复，不检查正则裁切。"""
+"""正文保存 Firecrawl 的整段 markdown。标题用 CSV，不交给模型改写。"""
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import unittest
@@ -30,42 +29,35 @@ The harbor master said the port reopened at dawn after crews cleared the last de
 
 - [Markets rally](https://news.example/rally)
 """
-RECORDED = json.dumps(
-    {
-        "title": "Harbor City port reopens after the storm",
-        "body": "The harbor master said the port reopened at dawn after crews cleared the last debris.",
-    }
-)
 AFTER = "2026-10-24T23:00:00.000Z"
 
 
 class BodyExtractTest(unittest.TestCase):
-    def test_model_reply_becomes_title_and_body(self) -> None:
-        seen: list[str] = []
-
-        def complete(prompt: str) -> str:
-            seen.append(prompt)
-            return RECORDED
-
-        cleaned = body_extract.clean_markdown(MESSY, complete)
-        self.assertEqual(len(seen), 1)
-        self.assertIn(MESSY, seen[0])
+    def test_csv_title_and_full_markdown_are_stored(self) -> None:
+        record = body_extract.build_record(
+            {
+                "id": "1",
+                "url": "https://news.example/good",
+                "csv_title": "CSV title stays",
+            },
+            {"markdown": MESSY, "error": ""},
+        )
+        self.assertEqual(record["标题"], "CSV title stays")
+        self.assertEqual(record["正文"], MESSY)
         self.assertIn(
-            "Drop navigation, ads, related links, and markdown link syntax.", seen[0]
+            "[Skip to content](https://news.example/story#content)", record["正文"]
         )
-        self.assertEqual(cleaned["title"], "Harbor City port reopens after the storm")
-        self.assertEqual(
-            cleaned["body"],
-            "The harbor master said the port reopened at dawn after crews cleared the last debris.",
+        self.assertIn("# Advertisement", record["正文"])
+        self.assertEqual(record["错误"], "")
+
+    def test_markdown_is_not_rewritten(self) -> None:
+        markdown = "The score was 3-2 [in overtime].\n\n[Related](https://news.example/x)"
+        record = body_extract.build_record(
+            {"id": "1", "url": "https://news.example/a", "csv_title": "Final"},
+            {"markdown": markdown, "error": ""},
         )
-        self.assertEqual(cleaned["body"], json.loads(RECORDED)["body"])
-
-    def test_model_text_is_stored_without_further_cleaning(self) -> None:
-        reply = '{"title": "Final", "body": "The score was 3-2 [in overtime]."}'
-
-        cleaned = body_extract.clean_markdown("messy page", lambda prompt: reply)
-        self.assertEqual(cleaned["title"], "Final")
-        self.assertEqual(cleaned["body"], "The score was 3-2 [in overtime].")
+        self.assertEqual(record["标题"], "Final")
+        self.assertEqual(record["正文"], markdown)
 
     def test_failed_url_still_writes_and_sends_link(self) -> None:
         calls: list[str] = []
@@ -90,10 +82,6 @@ class BodyExtractTest(unittest.TestCase):
                 "https://news.example/bad": {"markdown": "", "error": "HTTP 403"},
             }
 
-        def complete(prompt: str) -> str:
-            self.assertIn("Harbor City port reopens", prompt)
-            return RECORDED
-
         fake = Fake()
         summary = body_extract.run_bodies(
             header=["id", "url", "title"],
@@ -104,17 +92,14 @@ class BodyExtractTest(unittest.TestCase):
             ],
             after=AFTER,
             scrape=scrape,
-            complete=complete,
             client=fake,
             send=sent.append,
             secrets_ok=True,
         )
         self.assertEqual(calls, ["scrape", "prepare", "replace"])
         self.assertEqual(len(fake.rows), 2)
-        self.assertEqual(
-            fake.rows[0]["标题"], "Harbor City port reopens after the storm"
-        )
-        self.assertEqual(fake.rows[0]["正文"], json.loads(RECORDED)["body"])
+        self.assertEqual(fake.rows[0]["标题"], "csv good")
+        self.assertEqual(fake.rows[0]["正文"], MESSY)
         self.assertEqual(fake.rows[0]["错误"], "")
         self.assertEqual(fake.rows[1]["id"], "2")
         self.assertEqual(fake.rows[1]["正文"], "")
@@ -129,6 +114,7 @@ class BodyExtractTest(unittest.TestCase):
         self.assertEqual(summary["unique_urls"], 2)
         self.assertEqual(summary["bitable_deleted"], 5)
         self.assertEqual(summary["bitable_written"], 2)
+        self.assertEqual(summary["stored_ok"], 1)
         self.assertEqual(summary["data_date"], "2026-10-25")
 
     def test_zero_delta_skips_scrape_and_message(self) -> None:
@@ -150,7 +136,6 @@ class BodyExtractTest(unittest.TestCase):
             rows=[],
             after=AFTER,
             scrape=scrape,
-            complete=lambda prompt: RECORDED,
             client=Fake(),
             send=send,
             secrets_ok=False,
@@ -180,7 +165,6 @@ class BodyExtractTest(unittest.TestCase):
                 rows=[["1", "https://news.example/a"]],
                 after=AFTER,
                 scrape=scrape,
-                complete=lambda prompt: RECORDED,
                 client=Fake(),
                 send=lambda text: None,
                 secrets_ok=False,
@@ -205,7 +189,6 @@ class BodyExtractTest(unittest.TestCase):
                 rows=[["1", "https://news.example/a"]],
                 after=AFTER,
                 scrape=lambda urls: {urls[0]: {"markdown": MESSY, "error": ""}},
-                complete=lambda prompt: RECORDED,
                 client=Fake(),
                 send=sent.append,
                 secrets_ok=True,
@@ -229,7 +212,6 @@ class BodyExtractTest(unittest.TestCase):
                 rows=[["1", "https://news.example/a"]],
                 after=AFTER,
                 scrape=lambda urls: {urls[0]: {"markdown": MESSY, "error": ""}},
-                complete=lambda prompt: RECORDED,
                 client=Fake(),
                 send=sent.append,
                 secrets_ok=True,
@@ -359,6 +341,11 @@ class BodyExtractTest(unittest.TestCase):
         self.assertNotIn("extract_bodies", export_source)
         self.assertNotIn("import re", source)
         self.assertNotIn('"PUT"', source)
+        self.assertNotIn("chat/completions", source)
+        self.assertNotIn("jina", source.lower())
+        self.assertNotIn("ARTICLE_MODEL", skill)
+        self.assertIn("标题", skill)
+        self.assertIn("整段 markdown", skill)
 
 
 if __name__ == "__main__":

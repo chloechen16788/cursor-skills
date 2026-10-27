@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""把增量 CSV 里的文章抓下来，交给模型判断标题和标题下的正文，再整表写入当日多维表格。"""
+"""把增量 CSV 里的文章抓下来。标题用 CSV，正文保存 Firecrawl 的整段 markdown，再整表写入当日多维表格。"""
 
 from __future__ import annotations
 
 import csv
-import json
 import os
 import shutil
 import subprocess
@@ -12,9 +11,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 import cision_lib
 import feishu_push
@@ -30,38 +27,11 @@ FIELD_NAMES = ("id", "url", "标题", "正文", "错误")
 CELL_LIMIT = 100000
 BITABLE_API = "https://open.feishu.cn/open-apis/bitable/v1"
 WIKI_NODE_URL = "https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node"
-DEFAULT_MODEL_BASE = "https://api.openai.com/v1"
-DEFAULT_MODEL_NAME = "gpt-4.1-mini"
-
-JUDGMENT_PROMPT = """You extract one news article from scraped markdown.
-
-The markdown is messy. It can contain navigation, advertisements, subscription prompts, related links, share buttons, and markdown link syntax. Decide where the article title is, and where the body under that title starts and ends. Keep the title and that body. Drop navigation, ads, related links, and markdown link syntax. Keep the article's own words. Do not summarize, translate, or add anything that is not in the article.
-
-Reply with one JSON object and no other text. Both values are strings:
-{"title": "...", "body": "..."}
-
-The body is plain text. Separate paragraphs with a blank line. Do not use markdown link syntax in the body.
-"""
 
 
 def missing_firecrawl_message() -> str:
     return (
         "未设置 FIRECRAWL_API_KEY。请用户添加该密钥后再跑正文。已停止，未删除飞书记录。"
-    )
-
-
-def missing_model_message() -> str:
-    return (
-        "未设置 ARTICLE_MODEL_API_KEY 或 OPENAI_API_KEY。"
-        "正文清洗要调用模型，不能在脚本里用规则裁切。"
-        "已停止，未删除飞书记录。"
-    )
-
-
-def model_api_key() -> str:
-    return (
-        os.environ.get("ARTICLE_MODEL_API_KEY", "").strip()
-        or os.environ.get("OPENAI_API_KEY", "").strip()
     )
 
 
@@ -73,108 +43,9 @@ def gate_message() -> str | None:
     """密钥或命令缺失时返回错误文案。调用方必须在删除飞书记录之前停住。"""
     if not firecrawl_key_present():
         return missing_firecrawl_message()
-    if not model_api_key():
-        return missing_model_message()
     if shutil.which("firecrawl") is None:
         return "找不到 firecrawl 命令。已停止，未删除飞书记录。"
     return None
-
-
-def judgment_prompt(markdown: str) -> str:
-    return JUDGMENT_PROMPT + "\n\nScraped markdown:\n" + markdown
-
-
-def parse_model_reply(text: str) -> dict[str, str]:
-    raw = text.strip()
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start < 0 or end <= start:
-        raise RuntimeError("模型没有返回 JSON 对象")
-    try:
-        payload = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError as error:
-        raise RuntimeError(f"模型返回的不是 JSON（{error}）") from None
-    if not isinstance(payload, dict):
-        raise RuntimeError("模型返回的不是 JSON 对象")
-    title = payload.get("title")
-    body = payload.get("body")
-    if not isinstance(title, str) or not isinstance(body, str):
-        raise RuntimeError("模型返回缺少 title 或 body 字符串")
-    return {"title": title.strip(), "body": body.strip()}
-
-
-def clean_markdown(markdown: str, complete) -> dict[str, str]:
-    """把抓取原文交给 complete。标题和正文只用模型返回的字符串，脚本不改写正文。"""
-    reply = complete(judgment_prompt(markdown))
-    if not isinstance(reply, str):
-        raise RuntimeError("模型返回不是字符串")
-    cleaned = parse_model_reply(reply)
-    if not cleaned["title"] and not cleaned["body"]:
-        raise RuntimeError("模型没有返回标题和正文")
-    return cleaned
-
-
-def chat_complete(prompt: str) -> str:
-    key = model_api_key()
-    if not key:
-        raise RuntimeError(missing_model_message())
-    base = (
-        os.environ.get("ARTICLE_MODEL_BASE_URL", DEFAULT_MODEL_BASE).strip().rstrip("/")
-        or DEFAULT_MODEL_BASE
-    )
-    model = (
-        os.environ.get("ARTICLE_MODEL", DEFAULT_MODEL_NAME).strip()
-        or DEFAULT_MODEL_NAME
-    )
-    payload = json.dumps(
-        {
-            "model": model,
-            "temperature": 0,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-    ).encode("utf-8")
-    request = Request(
-        f"{base}/chat/completions",
-        data=payload,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {key}",
-        },
-    )
-    try:
-        with urlopen(request, timeout=180) as response:
-            raw = response.read()
-    except HTTPError as error:
-        detail = (
-            error.read().decode("utf-8", errors="replace")
-            if error.fp is not None
-            else ""
-        )
-        raise RuntimeError(
-            f"模型接口 HTTP {error.code}：{feishu_push.redact_secrets(detail)[:300]}"
-        ) from None
-    except URLError as error:
-        raise RuntimeError(f"模型请求失败：{error.reason}") from None
-    try:
-        body = json.loads(raw.decode("utf-8"))
-    except json.JSONDecodeError as error:
-        raise RuntimeError(f"模型响应不是 JSON（{error}）") from None
-    choices = body.get("choices") or []
-    if not choices or not isinstance(choices[0], dict):
-        raise RuntimeError("模型响应没有 choices")
-    content = (choices[0].get("message") or {}).get("content")
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict) and isinstance(item.get("text"), str):
-                parts.append(item["text"])
-        content = "".join(parts)
-    if not isinstance(content, str) or not content.strip():
-        raise RuntimeError("模型响应没有文本")
-    return content
 
 
 def load_delta(path: Path) -> tuple[list[str], list[list[str]]]:
@@ -263,7 +134,8 @@ def _limit_cells(record: dict) -> dict:
     return record
 
 
-def build_record(item: dict, fetched: dict | None, complete) -> dict:
+def build_record(item: dict, fetched: dict | None) -> dict:
+    """标题只用 CSV。正文保存 Firecrawl markdown，不交给模型改写。"""
     record = {
         "id": item.get("id") or "",
         "url": item.get("url") or "",
@@ -285,13 +157,7 @@ def build_record(item: dict, fetched: dict | None, complete) -> dict:
     if not markdown.strip():
         record["错误"] = "抓取结果为空"
         return record
-    try:
-        cleaned = clean_markdown(markdown, complete)
-    except Exception as error:  # noqa: BLE001
-        record["错误"] = feishu_push.redact_secrets(str(error))[:500]
-        return record
-    record["标题"] = cleaned["title"]
-    record["正文"] = cleaned["body"]
+    record["正文"] = markdown
     record["错误"] = ""
     return _limit_cells(record)
 
@@ -457,7 +323,6 @@ def run_bodies(
     rows: list[list[str]],
     after: str,
     scrape,
-    complete,
     client,
     send,
     secrets_ok: bool,
@@ -483,7 +348,7 @@ def run_bodies(
     records: list[dict] = []
     scraped_ok = 0
     scraped_failed = 0
-    cleaned_ok = 0
+    stored_ok = 0
     for item in items:
         result = None if not item["url"] else fetched.get(item["url"])
         if (
@@ -495,9 +360,9 @@ def run_bodies(
             scraped_failed += 1
         else:
             scraped_ok += 1
-        record = build_record(item, result, complete)
-        if not record["错误"]:
-            cleaned_ok += 1
+        record = build_record(item, result)
+        if record["正文"]:
+            stored_ok += 1
         records.append(record)
 
     try:
@@ -523,7 +388,7 @@ def run_bodies(
         "data_date": data_date,
         "scraped_ok": scraped_ok,
         "scraped_failed": scraped_failed,
-        "cleaned_ok": cleaned_ok,
+        "stored_ok": stored_ok,
         "body_rows": written,
         "bitable_deleted": deleted,
         "bitable_written": written,
@@ -542,7 +407,7 @@ def format_body_summary(summary: dict) -> str:
             f"data_date={summary['data_date']}",
             f"scraped_ok={summary['scraped_ok']}",
             f"scraped_failed={summary['scraped_failed']}",
-            f"cleaned_ok={summary['cleaned_ok']}",
+            f"stored_ok={summary['stored_ok']}",
             f"body_rows={summary['body_rows']}",
             f"bitable_deleted={summary['bitable_deleted']}",
             f"bitable_written={summary['bitable_written']}",
@@ -571,7 +436,6 @@ def run_delta_file(
             rows=rows,
             after=window,
             scrape=lambda urls: scrape_urls(urls, directory, workers=workers),
-            complete=chat_complete,
             client=DailyTable(),
             send=feishu_push.send_text,
             secrets_ok=blocked is None,
