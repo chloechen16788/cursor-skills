@@ -79,6 +79,22 @@ class BodyExtractTest(unittest.TestCase):
         self.assertEqual(truncated[0]["id"], "9")
         self.assertEqual(truncated[0]["original"], 100001)
         self.assertEqual(truncated[0]["stored"], body_extract.EXCEL_CELL_LIMIT)
+        listed = body_extract.format_body_summary(
+            {
+                "bodies": "written",
+                "delta_rows": 1,
+                "unique_urls": 1,
+                "data_date": "2026-10-25",
+                "scraped_ok": 1,
+                "scraped_failed": 0,
+                "stored_ok": 1,
+                "body_rows": 1,
+                "body_xlsx": "delta-bodies.xlsx",
+                "truncated": truncated,
+                "feishu": "sent",
+            }
+        )
+        self.assertIn("truncated_id=9 original=100001 stored=32767", listed)
 
     def test_csv_roundtrip_keeps_title_and_full_markdown(self) -> None:
         sent: list[tuple[str, Path]] = []
@@ -279,6 +295,7 @@ class BodyExtractTest(unittest.TestCase):
         export_source = (SCRIPTS / "export_mentions.py").read_text(encoding="utf-8")
         source = (SCRIPTS / "body_extract.py").read_text(encoding="utf-8")
         push_source = (SCRIPTS / "feishu_push.py").read_text(encoding="utf-8")
+        self.assertIn("run the cision mentions skill", skill)
         self.assertIn("extract_bodies.py", skill)
         self.assertIn("一个自动化里放两条 cron 时，只会触发第一条", skill)
         self.assertIn("`0 23 * * *`", skill)

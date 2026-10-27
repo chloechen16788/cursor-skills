@@ -443,6 +443,10 @@ def format_body_summary(summary: dict) -> str:
             f"body_rows={summary['body_rows']}",
             f"body_xlsx={summary['body_xlsx']}",
             f"truncated={len(summary['truncated'])}",
+            *[
+                f"truncated_id={item['id']} original={item['original']} stored={item['stored']}"
+                for item in summary["truncated"]
+            ],
             f"feishu={summary['feishu']}",
         ]
     )
