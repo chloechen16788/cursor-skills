@@ -65,6 +65,20 @@ class BodyExtractTest(unittest.TestCase):
         )
         self.assertEqual(len(long_record["content"]), 100001)
         self.assertEqual(long_record["content"], long_markdown)
+        with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
+            book = Path(temporary) / "long.xlsx"
+            truncated = body_extract.write_bodies_xlsx(
+                book,
+                ["id", "url", "title"],
+                [["9", "https://news.example/b", "Long"]],
+                [long_markdown],
+            )
+            _, stored_rows = body_extract.read_bodies_xlsx(book)
+        self.assertEqual(len(stored_rows[0][-1]), body_extract.EXCEL_CELL_LIMIT)
+        self.assertEqual(truncated[0]["row"], 1)
+        self.assertEqual(truncated[0]["id"], "9")
+        self.assertEqual(truncated[0]["original"], 100001)
+        self.assertEqual(truncated[0]["stored"], body_extract.EXCEL_CELL_LIMIT)
 
     def test_csv_roundtrip_keeps_title_and_full_markdown(self) -> None:
         sent: list[tuple[str, Path]] = []
@@ -85,7 +99,7 @@ class BodyExtractTest(unittest.TestCase):
             }
 
         with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
-            dest = Path(temporary) / "delta-bodies.csv"
+            dest = Path(temporary) / "delta-bodies.xlsx"
             summary = body_extract.run_bodies(
                 header=header,
                 rows=rows,
@@ -95,7 +109,7 @@ class BodyExtractTest(unittest.TestCase):
                 dest=dest,
                 secrets_ok=True,
             )
-            out_header, out_rows = body_extract.read_bodies_csv(dest)
+            out_header, out_rows = body_extract.read_bodies_xlsx(dest)
         self.assertEqual(out_header, ["id", "url", "title", "content"])
         self.assertEqual(len(out_rows), 3)
         self.assertEqual(out_rows[0][2], "csv good, still")
@@ -119,7 +133,8 @@ class BodyExtractTest(unittest.TestCase):
         self.assertEqual(summary["stored_ok"], 2)
         self.assertEqual(summary["scraped_failed"], 1)
         self.assertEqual(summary["data_date"], "2026-10-25")
-        self.assertTrue(str(summary["body_csv"]).endswith("delta-bodies.csv"))
+        self.assertTrue(str(summary["body_xlsx"]).endswith("delta-bodies.xlsx"))
+        self.assertEqual(summary["truncated"], [])
         self.assertNotIn("bitable", summary)
 
     def test_zero_delta_skips_scrape_and_message(self) -> None:
@@ -176,7 +191,7 @@ class BodyExtractTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
             blocked = Path(temporary) / "not-a-directory"
             blocked.write_text("x", encoding="utf-8")
-            dest = blocked / "delta-bodies.csv"
+            dest = blocked / "delta-bodies.xlsx"
             with self.assertRaises(RuntimeError) as caught:
                 body_extract.run_bodies(
                     header=["id", "url", "title"],
@@ -198,7 +213,7 @@ class BodyExtractTest(unittest.TestCase):
             raise RuntimeError("上传 500")
 
         with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
-            dest = Path(temporary) / "delta-bodies.csv"
+            dest = Path(temporary) / "delta-bodies.xlsx"
             with self.assertRaises(RuntimeError) as caught:
                 body_extract.run_bodies(
                     header=["id", "url", "title"],
@@ -210,7 +225,7 @@ class BodyExtractTest(unittest.TestCase):
                     secrets_ok=True,
                 )
             self.assertTrue(dest.is_file())
-            header, rows = body_extract.read_bodies_csv(dest)
+            header, rows = body_extract.read_bodies_xlsx(dest)
         self.assertEqual(header[-1], "content")
         self.assertEqual(rows[0][-1], MESSY)
         self.assertIn("群消息发送失败", str(caught.exception))
@@ -226,7 +241,7 @@ class BodyExtractTest(unittest.TestCase):
         )
         delta = Path("/tmp") / folder / "delta.csv"
         self.assertEqual(body_extract.after_from_delta_path(delta), AFTER)
-        self.assertEqual(body_extract.bodies_csv_path(delta).name, "delta-bodies.csv")
+        self.assertEqual(body_extract.bodies_xlsx_path(delta).name, "delta-bodies.xlsx")
 
     def test_scrape_uses_only_main_content_and_not_api_key_flag(self) -> None:
         import body_extract as module
@@ -272,7 +287,7 @@ class BodyExtractTest(unittest.TestCase):
         self.assertIn("MbglbIcF6aKwyXsCW7QcSTbIncb", skill)
         self.assertIn("vew0Gce8xU", skill)
         self.assertIn("delta_rows", skill)
-        self.assertIn("delta-bodies.csv", skill)
+        self.assertIn("delta-bodies.xlsx", skill)
         self.assertIn("不要把正文写进当日表", skill)
         self.assertIn("整段 markdown", skill)
         self.assertIn("标题", skill)

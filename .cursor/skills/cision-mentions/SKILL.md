@@ -162,7 +162,7 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 
 抓取在脚本里成批进行，调用 PATH 上的 `firecrawl scrape --only-main-content`。找不到命令时，和缺密钥一样，在发送文件之前停止。不要让 agent 每个 URL 单独开一轮。以后会有几百条 URL。密钥只从环境变量 `FIRECRAWL_API_KEY` 读取，不要写进命令行。
 
-不做模型清洗。`标题` 就是增量 CSV 里的 `title` 列，脚本不改这一列，也不另写标题。新增列名是 `content`，不叫 `正文`。它保存 Firecrawl 返回的整段 markdown，不删导航、不改写、不摘要、不截断，避免后面再抽取时丢掉原文。原有列全部保留，不丢列。输出用 CSV，不用 Excel：xlsx 单元格上限是 32767 个字符，整段 markdown 会更长；CSV 会给含换行、逗号和引号的字段加引号，可以原样放下。文件写在增量旁边，名字是 `delta-bodies.csv`。同一 url 的重复行都保留，并填入同一段 markdown。抓取失败的行仍保留，`content` 为空。
+不做模型清洗。`标题` 就是增量 CSV 里的 `title` 列，脚本不改这一列，也不另写标题。新增列名是 `content`，不叫 `正文`。它保存 Firecrawl 返回的整段 markdown，不删导航、不改写、不摘要，避免后面再抽取时丢掉原文。原有列全部保留，不丢列。输出用 Excel（`delta-bodies.xlsx`），不用 CSV：markdown 里的换行和逗号会把 CSV 在飞书和 Excel 里拆列。xlsx 单元格上限是 32767 个字符。超限的格子截断到这个长度，标准输出列出数据行号、`id`、原长度和写入长度。同一 url 的重复行都保留，并填入同一段 markdown。抓取失败的行仍保留，`content` 为空。
 
 写文件前如果没有 `FIRECRAWL_API_KEY`，立刻停止，不要发送文件。不要把密钥打进命令行。
 
@@ -178,7 +178,7 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 
 1. 确认密钥和 `firecrawl` 命令。缺失则停止，不发送文件，也不访问当日表。
 2. 按 url 去重后抓取。每一行增量都保留。`content` 保存整段 markdown。
-3. 写成 `delta-bodies.csv`。原有列顺序不变，最后追加 `content`。
+3. 写成 `delta-bodies.xlsx`。原有列顺序不变，最后追加 `content`。
 4. 只向群 `oc_27040b0dc3a733ab164199154c489fad` 发两样东西：一段短文本，以及这个文件。短文本只有数据日期、`delta_rows`、抓到的行数和失败行数。不发到别的会话，不发当日表链接，不改当日表。
 
 比较用的「百度海外竞品最新数据」仍只由导出步骤整表重写。这一步不读、不删那张表，也不读、不删当日表。

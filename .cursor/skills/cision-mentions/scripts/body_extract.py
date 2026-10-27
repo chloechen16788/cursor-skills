@@ -8,14 +8,18 @@ import os
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 import cision_lib
 import feishu_push
 
 BODY_COLUMN = "content"
+EXCEL_CELL_LIMIT = 32767
+_SHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 
 
 def missing_firecrawl_message() -> str:
@@ -82,8 +86,8 @@ def shanghai_data_date(after: str) -> str:
     return moment.astimezone(cision_lib.SHANGHAI).date().isoformat()
 
 
-def bodies_csv_path(delta_path: Path) -> Path:
-    return delta_path.with_name(f"{delta_path.stem}-bodies.csv")
+def bodies_xlsx_path(delta_path: Path) -> Path:
+    return delta_path.with_name(f"{delta_path.stem}-bodies.xlsx")
 
 
 def body_notice(summary: dict) -> str:
@@ -136,10 +140,39 @@ def _pad(row: list[str], width: int) -> list[str]:
     return list(row) + [""] * (width - len(row))
 
 
-def write_bodies_csv(
+def _excel_text(value: str) -> str:
+    """去掉 XML 不能放入单元格的控制字符，保留换行。"""
+    return "".join(char for char in value if char in "\t\n\r" or ord(char) >= 32)
+
+
+def fit_excel_cell(value: str) -> tuple[str, int | None]:
+    """返回写入 Excel 的文本，以及超限时的原长度。未超限时第二个值是 None。"""
+    original = len(value)
+    text = _excel_text(value)
+    if len(text) <= EXCEL_CELL_LIMIT:
+        return text, None
+    return text[:EXCEL_CELL_LIMIT], original
+
+
+def _column_name(index: int) -> str:
+    name = ""
+    number = index
+    while number:
+        number, remainder = divmod(number - 1, 26)
+        name = chr(65 + remainder) + name
+    return name
+
+
+def _inline_cell(ref: str, value: str) -> str:
+    text = escape(value)
+    space = ' xml:space="preserve"' if value[:1].isspace() or value[-1:].isspace() or "\n" in value else ""
+    return f'<c r="{ref}" t="inlineStr"><is><t{space}>{text}</t></is></c>'
+
+
+def write_bodies_xlsx(
     path: Path, header: list[str], rows: list[list[str]], bodies: list[str]
-) -> None:
-    """在原增量列后追加 content。CSV 能放下超长换行文本；xlsx 单元格上限是 32767。"""
+) -> list[dict]:
+    """在原增量列后追加 content。超过 Excel 单元格上限的格子截断到 32767。"""
     if len(rows) != len(bodies):
         raise RuntimeError("content 行数和增量行数不一致，未发送文件")
     if BODY_COLUMN in header:
@@ -147,11 +180,80 @@ def write_bodies_csv(
     cision_lib.ensure_output_dir(path.parent)
     path.parent.mkdir(parents=True, exist_ok=True)
     width = len(header)
-    with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow([*header, BODY_COLUMN])
-        for row, body in zip(rows, bodies):
-            writer.writerow([*_pad(row, width), body])
+    id_index = header.index("id") if "id" in header else None
+    table = [[*header, BODY_COLUMN]]
+    truncated: list[dict] = []
+    for row_number, (row, body) in enumerate(zip(rows, bodies), start=1):
+        values = [*_pad(row, width), body]
+        stored: list[str] = []
+        for column, value in enumerate(values):
+            text, original = fit_excel_cell(value)
+            stored.append(text)
+            if original is not None:
+                mention_id = ""
+                if id_index is not None and id_index < len(row):
+                    mention_id = row[id_index].strip()
+                truncated.append(
+                    {
+                        "row": row_number,
+                        "id": mention_id,
+                        "column": table[0][column],
+                        "original": original,
+                        "stored": len(text),
+                    }
+                )
+        table.append(stored)
+    sheet_rows: list[str] = []
+    for row_index, values in enumerate(table, start=1):
+        cells = [
+            _inline_cell(f"{_column_name(column)}{row_index}", value)
+            for column, value in enumerate(values, start=1)
+        ]
+        sheet_rows.append(f'<row r="{row_index}">{"".join(cells)}</row>')
+    sheet = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<worksheet xmlns="{_SHEET_NS}"><sheetData>{"".join(sheet_rows)}</sheetData></worksheet>'
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets><sheet name="delta" sheetId="1" r:id="rId1"/></sheets></workbook>'
+    )
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/xl/workbook.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        '<Override PartName="/xl/worksheets/sheet1.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        "</Types>"
+    )
+    root_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+        'Target="xl/workbook.xml"/>'
+        "</Relationships>"
+    )
+    workbook_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+        'Target="worksheets/sheet1.xml"/>'
+        "</Relationships>"
+    )
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", content_types)
+        archive.writestr("_rels/.rels", root_rels)
+        archive.writestr("xl/workbook.xml", workbook)
+        archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
+        archive.writestr("xl/worksheets/sheet1.xml", sheet)
+    return truncated
 
 
 def read_bodies_csv(path: Path) -> tuple[list[str], list[list[str]]]:
@@ -159,6 +261,32 @@ def read_bodies_csv(path: Path) -> tuple[list[str], list[list[str]]]:
         reader = csv.reader(handle)
         header = next(reader)
         return header, list(reader)
+
+
+def read_bodies_xlsx(path: Path) -> tuple[list[str], list[list[str]]]:
+    import xml.etree.ElementTree as ElementTree
+
+    with zipfile.ZipFile(path) as archive:
+        root = ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    namespace = {"m": _SHEET_NS}
+    parsed: list[list[str]] = []
+    for row in root.findall("m:sheetData/m:row", namespace):
+        cells: dict[int, str] = {}
+        for cell in row.findall("m:c", namespace):
+            ref = cell.get("r") or ""
+            letters = "".join(char for char in ref if char.isalpha())
+            index = 0
+            for char in letters:
+                index = index * 26 + (ord(char) - 64)
+            text = "".join(
+                node.text or "" for node in cell.findall(".//m:t", namespace)
+            )
+            cells[index] = text
+        width = max(cells) if cells else 0
+        parsed.append([cells.get(column, "") for column in range(1, width + 1)])
+    if not parsed:
+        return [], []
+    return parsed[0], parsed[1:]
 
 
 def scrape_one(url: str, dest: Path) -> dict:
@@ -270,7 +398,7 @@ def run_bodies(
         bodies.append(record["content"])
 
     try:
-        write_bodies_csv(dest, header, data_rows, bodies)
+        truncated = write_bodies_xlsx(dest, header, data_rows, bodies)
     except Exception as error:  # noqa: BLE001
         raise RuntimeError(f"正文文件没有写成，未发送：{error}") from None
     notice = body_notice(
@@ -294,7 +422,8 @@ def run_bodies(
         "scraped_failed": scraped_failed,
         "stored_ok": stored_ok,
         "body_rows": len(data_rows),
-        "body_csv": str(dest),
+        "body_xlsx": str(dest),
+        "truncated": truncated,
         "notice": notice,
         "feishu": "sent",
     }
@@ -312,7 +441,8 @@ def format_body_summary(summary: dict) -> str:
             f"scraped_failed={summary['scraped_failed']}",
             f"stored_ok={summary['stored_ok']}",
             f"body_rows={summary['body_rows']}",
-            f"body_csv={summary['body_csv']}",
+            f"body_xlsx={summary['body_xlsx']}",
+            f"truncated={len(summary['truncated'])}",
             f"feishu={summary['feishu']}",
         ]
     )
@@ -328,7 +458,7 @@ def run_delta_file(
     header, rows = load_delta(delta_path)
     window = after.strip() or after_from_delta_path(delta_path)
     blocked = gate_message()
-    dest = bodies_csv_path(delta_path)
+    dest = bodies_xlsx_path(delta_path)
     owned = workdir is None
     directory = (
         Path(tempfile.mkdtemp(prefix="cision-bodies-")) if workdir is None else workdir

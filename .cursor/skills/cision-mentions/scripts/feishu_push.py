@@ -138,12 +138,19 @@ def _send_message(token: str, msg_type: str, content: dict) -> None:
     )
 
 
+def _upload_media_type(path: Path) -> str:
+    if path.suffix.lower() == ".xlsx":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return "text/csv"
+
+
 def _upload_file(token: str, path: Path) -> str:
     content = path.read_bytes()
     if len(content) > MAX_FILE_BYTES:
-        raise RuntimeError(f"增量 CSV 超过 30MB（{len(content)} 字节），未上传")
+        raise RuntimeError(f"文件超过 30MB（{len(content)} 字节），未上传")
     boundary = "----CisionMentions" + uuid.uuid4().hex
     filename = path.name.replace('"', "")
+    file_type = _upload_media_type(path)
     prefix = (
         f"--{boundary}\r\n"
         'Content-Disposition: form-data; name="file_type"\r\n\r\n'
@@ -153,7 +160,7 @@ def _upload_file(token: str, path: Path) -> str:
         f"{filename}\r\n"
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
-        "Content-Type: text/csv\r\n\r\n"
+        f"Content-Type: {file_type}\r\n\r\n"
     ).encode("utf-8")
     suffix = f"\r\n--{boundary}--\r\n".encode("utf-8")
     payload = _post(
