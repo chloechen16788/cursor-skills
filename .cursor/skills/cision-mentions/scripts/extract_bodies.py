@@ -21,7 +21,7 @@ def main() -> None:
         help="导出摘要里的 after。省略时从 delta.csv 的父目录名还原",
     )
     parser.add_argument(
-        "--workers", type=int, default=8, help="同时抓取的 URL 数，1 到 20"
+        "--workers", type=int, default=45, help="同时抓取的 URL 数，1 到 45"
     )
     args = parser.parse_args()
     summary = body_extract.run_delta_file(
