@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""抓取本次增量 CSV 的正文，整段 markdown 写入当日多维表格。不读取比较表。"""
+"""抓取本次增量 CSV 的正文，追加到 CSV 后只把文件发到固定群。不写当日表。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import body_extract
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="用本次增量 CSV 抓取正文，保存整段 markdown，并整表写入当日多维表格"
+        description="用本次增量 CSV 抓取正文，追加正文列后把 CSV 发到固定群"
     )
     parser.add_argument("--delta-csv", required=True, help="同一次导出写出的 delta.csv")
     parser.add_argument(

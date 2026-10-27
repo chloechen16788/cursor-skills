@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""正文保存 Firecrawl 的整段 markdown。标题用 CSV，不交给模型改写。"""
+"""正文追加到增量 CSV。标题用 CSV，不交给模型改写，也不写当日表。"""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class BodyExtractTest(unittest.TestCase):
         self.assertIn("# Advertisement", record["正文"])
         self.assertEqual(record["错误"], "")
 
-    def test_markdown_is_not_rewritten(self) -> None:
+    def test_markdown_is_not_rewritten_or_truncated(self) -> None:
         markdown = "The score was 3-2 [in overtime].\n\n[Related](https://news.example/x)"
         record = body_extract.build_record(
             {"id": "1", "url": "https://news.example/a", "csv_title": "Final"},
@@ -58,22 +58,24 @@ class BodyExtractTest(unittest.TestCase):
         )
         self.assertEqual(record["标题"], "Final")
         self.assertEqual(record["正文"], markdown)
+        long_markdown = "段" * 100001
+        long_record = body_extract.build_record(
+            {"id": "2", "url": "https://news.example/b", "csv_title": "Long"},
+            {"markdown": long_markdown, "error": ""},
+        )
+        self.assertEqual(len(long_record["正文"]), 100001)
+        self.assertEqual(long_record["正文"], long_markdown)
 
-    def test_failed_url_still_writes_and_sends_link(self) -> None:
-        calls: list[str] = []
-        sent: list[str] = []
-
-        class Fake:
-            def prepare(self) -> None:
-                calls.append("prepare")
-
-            def replace_all(self, rows: list[dict]) -> tuple[int, int]:
-                calls.append("replace")
-                self.rows = rows
-                return 5, len(rows)
+    def test_csv_roundtrip_keeps_title_and_full_markdown(self) -> None:
+        sent: list[Path] = []
+        header = ["id", "url", "title"]
+        rows = [
+            ["1", "https://news.example/good", "csv good, still"],
+            ["2", "https://news.example/bad", 'csv "bad"'],
+            ["3", "https://news.example/good", "duplicate"],
+        ]
 
         def scrape(urls: list[str]) -> dict:
-            calls.append("scrape")
             self.assertEqual(
                 urls, ["https://news.example/good", "https://news.example/bad"]
             )
@@ -82,62 +84,51 @@ class BodyExtractTest(unittest.TestCase):
                 "https://news.example/bad": {"markdown": "", "error": "HTTP 403"},
             }
 
-        fake = Fake()
-        summary = body_extract.run_bodies(
-            header=["id", "url", "title"],
-            rows=[
-                ["1", "https://news.example/good", "csv good"],
-                ["2", "https://news.example/bad", "csv bad"],
-                ["3", "https://news.example/good", "duplicate"],
-            ],
-            after=AFTER,
-            scrape=scrape,
-            client=fake,
-            send=sent.append,
-            secrets_ok=True,
-        )
-        self.assertEqual(calls, ["scrape", "prepare", "replace"])
-        self.assertEqual(len(fake.rows), 2)
-        self.assertEqual(fake.rows[0]["标题"], "csv good")
-        self.assertEqual(fake.rows[0]["正文"], MESSY)
-        self.assertEqual(fake.rows[0]["错误"], "")
-        self.assertEqual(fake.rows[1]["id"], "2")
-        self.assertEqual(fake.rows[1]["正文"], "")
-        self.assertEqual(fake.rows[1]["标题"], "csv bad")
-        self.assertEqual(fake.rows[1]["错误"], "HTTP 403")
-        self.assertEqual(sent, ["2026-10-25\n" + body_extract.DAILY_WIKI_URL])
-        self.assertIn("table=tblRwSj33U1e4t4N", sent[0])
-        self.assertIn("view=vew0Gce8xU", sent[0])
-        self.assertNotIn(".csv", sent[0])
+        with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
+            dest = Path(temporary) / "delta-bodies.csv"
+            summary = body_extract.run_bodies(
+                header=header,
+                rows=rows,
+                after=AFTER,
+                scrape=scrape,
+                send=sent.append,
+                dest=dest,
+                secrets_ok=True,
+            )
+            out_header, out_rows = body_extract.read_bodies_csv(dest)
+        self.assertEqual(out_header, ["id", "url", "title", "正文"])
+        self.assertEqual(len(out_rows), 3)
+        self.assertEqual(out_rows[0][2], "csv good, still")
+        self.assertEqual(out_rows[0][3], MESSY)
+        self.assertEqual(out_rows[1][2], 'csv "bad"')
+        self.assertEqual(out_rows[1][3], "")
+        self.assertEqual(out_rows[2][2], "duplicate")
+        self.assertEqual(out_rows[2][3], MESSY)
+        self.assertEqual(sent, [dest])
         self.assertEqual(summary["feishu"], "sent")
         self.assertEqual(summary["delta_rows"], 3)
+        self.assertEqual(summary["body_rows"], 3)
         self.assertEqual(summary["unique_urls"], 2)
-        self.assertEqual(summary["bitable_deleted"], 5)
-        self.assertEqual(summary["bitable_written"], 2)
-        self.assertEqual(summary["stored_ok"], 1)
+        self.assertEqual(summary["stored_ok"], 2)
+        self.assertEqual(summary["scraped_failed"], 1)
         self.assertEqual(summary["data_date"], "2026-10-25")
+        self.assertTrue(str(summary["body_csv"]).endswith("delta-bodies.csv"))
+        self.assertNotIn("bitable", summary)
 
     def test_zero_delta_skips_scrape_and_message(self) -> None:
         def scrape(urls: list[str]) -> dict:
             raise AssertionError("增量为 0 时不应抓取")
 
-        def send(text: str) -> None:
-            raise AssertionError("增量为 0 时不应发第二条消息")
-
-        class Fake:
-            def prepare(self) -> None:
-                raise AssertionError("不应访问飞书")
-
-            def replace_all(self, rows: list[dict]) -> tuple[int, int]:
-                raise AssertionError("不应删除")
+        def send(path: Path) -> None:
+            raise AssertionError("增量为 0 时不应发文件")
 
         summary = body_extract.run_bodies(
             header=["id", "url"],
             rows=[],
             after=AFTER,
             scrape=scrape,
-            client=Fake(),
             send=send,
+            dest=Path("/tmp/unused-bodies.csv"),
             secrets_ok=False,
             secret_error=body_extract.missing_firecrawl_message(),
         )
@@ -148,16 +139,12 @@ class BodyExtractTest(unittest.TestCase):
             "delta_rows=0\nbodies=skipped\nfeishu=skipped",
         )
 
-    def test_missing_firecrawl_key_stops_before_delete(self) -> None:
+    def test_missing_firecrawl_key_stops_before_send(self) -> None:
         def scrape(urls: list[str]) -> dict:
             raise AssertionError("缺密钥时不应抓取")
 
-        class Fake:
-            def prepare(self) -> None:
-                raise AssertionError("不应访问飞书")
-
-            def replace_all(self, rows: list[dict]) -> tuple[int, int]:
-                raise AssertionError("不应删除")
+        def send(path: Path) -> None:
+            raise AssertionError("缺密钥时不应发送")
 
         with self.assertRaises(RuntimeError) as caught:
             body_extract.run_bodies(
@@ -165,135 +152,74 @@ class BodyExtractTest(unittest.TestCase):
                 rows=[["1", "https://news.example/a"]],
                 after=AFTER,
                 scrape=scrape,
-                client=Fake(),
-                send=lambda text: None,
+                send=send,
+                dest=Path("/tmp/unused-bodies.csv"),
                 secrets_ok=False,
                 secret_error=body_extract.missing_firecrawl_message(),
             )
         self.assertIn("FIRECRAWL_API_KEY", str(caught.exception))
-        self.assertIn("未删除", str(caught.exception))
-
-    def test_prepare_failure_does_not_delete_or_send(self) -> None:
-        sent: list[str] = []
-
-        class Fake:
-            def prepare(self) -> None:
-                raise RuntimeError("字段 403")
-
-            def replace_all(self, rows: list[dict]) -> tuple[int, int]:
-                raise AssertionError("不应删除")
-
-        with self.assertRaises(RuntimeError) as caught:
-            body_extract.run_bodies(
-                header=["id", "url"],
-                rows=[["1", "https://news.example/a"]],
-                after=AFTER,
-                scrape=lambda urls: {urls[0]: {"markdown": MESSY, "error": ""}},
-                client=Fake(),
-                send=sent.append,
-                secrets_ok=True,
-            )
-        self.assertIn("未删除", str(caught.exception))
-        self.assertEqual(sent, [])
+        self.assertIn("没有改当日表", str(caught.exception))
 
     def test_write_failure_does_not_send(self) -> None:
-        sent: list[str] = []
+        sent: list[Path] = []
 
-        class Fake:
-            def prepare(self) -> None:
-                return None
+        def scrape(urls: list[str]) -> dict:
+            return {urls[0]: {"markdown": MESSY, "error": ""}}
 
-            def replace_all(self, rows: list[dict]) -> tuple[int, int]:
-                raise RuntimeError("写入 500")
-
-        with self.assertRaises(RuntimeError) as caught:
-            body_extract.run_bodies(
-                header=["id", "url"],
-                rows=[["1", "https://news.example/a"]],
-                after=AFTER,
-                scrape=lambda urls: {urls[0]: {"markdown": MESSY, "error": ""}},
-                client=Fake(),
-                send=sent.append,
-                secrets_ok=True,
-            )
-        self.assertIn("未发送群链接", str(caught.exception))
+        with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
+            blocked = Path(temporary) / "not-a-directory"
+            blocked.write_text("x", encoding="utf-8")
+            dest = blocked / "delta-bodies.csv"
+            with self.assertRaises(RuntimeError) as caught:
+                body_extract.run_bodies(
+                    header=["id", "url", "title"],
+                    rows=[["1", "https://news.example/a", "t"]],
+                    after=AFTER,
+                    scrape=scrape,
+                    send=sent.append,
+                    dest=dest,
+                    secrets_ok=True,
+                )
+        self.assertIn("未发送", str(caught.exception))
         self.assertEqual(sent, [])
 
-    def test_bitable_url_uses_obj_token(self) -> None:
-        calls: list[tuple[str, str, dict | None]] = []
+    def test_send_failure_keeps_the_file(self) -> None:
+        def scrape(urls: list[str]) -> dict:
+            return {urls[0]: {"markdown": MESSY, "error": ""}}
 
-        def request(
-            url: str, method: str, payload: dict | None = None, token: str | None = None
-        ) -> dict:
-            calls.append((method, url, payload))
-            self.assertEqual(token, "tenant")
-            if "get_node" in url:
-                self.assertIn("token=" + body_extract.WIKI_NODE_TOKEN, url)
-                return {
-                    "data": {"node": {"obj_type": "bitable", "obj_token": "APP_REAL"}}
-                }
-            if method == "GET" and "/fields" in url:
-                return {"data": {"items": [{"field_name": "文本"}], "has_more": False}}
-            if method == "POST" and url.endswith("/fields"):
-                return {"data": {}}
-            if method == "GET" and "/records?" in url:
-                return {
-                    "data": {"items": [{"record_id": "rec_old"}], "has_more": False}
-                }
-            if "batch_delete" in url:
-                return {"data": {}}
-            if "batch_create" in url:
-                return {"data": {}}
-            raise AssertionError((method, url))
+        def send(path: Path) -> None:
+            raise RuntimeError("上传 500")
 
-        table = body_extract.DailyTable(request=request, token="tenant")
-        table.prepare()
-        deleted, written = table.replace_all(
-            [
-                {
-                    "id": "1",
-                    "url": "https://news.example/a",
-                    "标题": "t",
-                    "正文": "b",
-                    "错误": "",
-                }
-            ]
-        )
-        self.assertEqual((deleted, written), (1, 1))
-        bitable = [url for method, url, payload in calls if "/bitable/" in url]
-        self.assertTrue(bitable)
-        for url in bitable:
-            self.assertIn("/apps/APP_REAL/", url)
-            self.assertNotIn("/apps/" + body_extract.WIKI_NODE_TOKEN, url)
-        self.assertFalse(any(method == "PUT" for method, url, payload in calls))
-        deleted_payloads = [
-            payload
-            for method, url, payload in calls
-            if url.endswith("/records/batch_delete")
-        ]
-        self.assertEqual(deleted_payloads, [{"records": ["rec_old"]}])
-        created = [payload for method, url, payload in calls if "batch_create" in url][
-            0
-        ]
-        self.assertEqual(created["records"][0]["fields"]["正文"], "b")
-        self.assertEqual(
-            [
-                payload["field_name"]
-                for method, url, payload in calls
-                if method == "POST" and url.endswith("/fields")
-            ],
-            list(body_extract.FIELD_NAMES),
-        )
+        with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
+            dest = Path(temporary) / "delta-bodies.csv"
+            with self.assertRaises(RuntimeError) as caught:
+                body_extract.run_bodies(
+                    header=["id", "url", "title"],
+                    rows=[["1", "https://news.example/a", "t"]],
+                    after=AFTER,
+                    scrape=scrape,
+                    send=send,
+                    dest=dest,
+                    secrets_ok=True,
+                )
+            self.assertTrue(dest.is_file())
+            header, rows = body_extract.read_bodies_csv(dest)
+        self.assertEqual(header[-1], "正文")
+        self.assertEqual(rows[0][-1], MESSY)
+        self.assertIn("群文件发送失败", str(caught.exception))
+        self.assertIn(str(dest), str(caught.exception))
 
     def test_data_date_and_delta_path(self) -> None:
         self.assertEqual(body_extract.shanghai_data_date(AFTER), "2026-10-25")
         import cision_lib
 
-        folder = f"{cision_lib.compact_stamp(AFTER)}_{cision_lib.compact_stamp('2026-10-25T23:00:00.000Z')}"
-        self.assertEqual(
-            body_extract.after_from_delta_path(Path("/tmp") / folder / "delta.csv"),
-            AFTER,
+        folder = (
+            f"{cision_lib.compact_stamp(AFTER)}_"
+            f"{cision_lib.compact_stamp('2026-10-25T23:00:00.000Z')}"
         )
+        delta = Path("/tmp") / folder / "delta.csv"
+        self.assertEqual(body_extract.after_from_delta_path(delta), AFTER)
+        self.assertEqual(body_extract.bodies_csv_path(delta).name, "delta-bodies.csv")
 
     def test_scrape_uses_only_main_content_and_not_api_key_flag(self) -> None:
         import body_extract as module
@@ -330,6 +256,7 @@ class BodyExtractTest(unittest.TestCase):
         skill = (SCRIPTS.parent / "SKILL.md").read_text(encoding="utf-8")
         export_source = (SCRIPTS / "export_mentions.py").read_text(encoding="utf-8")
         source = (SCRIPTS / "body_extract.py").read_text(encoding="utf-8")
+        push_source = (SCRIPTS / "feishu_push.py").read_text(encoding="utf-8")
         self.assertIn("extract_bodies.py", skill)
         self.assertIn("一个自动化里放两条 cron 时，只会触发第一条", skill)
         self.assertIn("`0 23 * * *`", skill)
@@ -338,14 +265,22 @@ class BodyExtractTest(unittest.TestCase):
         self.assertIn("MbglbIcF6aKwyXsCW7QcSTbIncb", skill)
         self.assertIn("vew0Gce8xU", skill)
         self.assertIn("delta_rows", skill)
+        self.assertIn("delta-bodies.csv", skill)
+        self.assertIn("不要把正文写进当日表", skill)
+        self.assertIn("整段 markdown", skill)
+        self.assertIn("标题", skill)
         self.assertNotIn("extract_bodies", export_source)
         self.assertNotIn("import re", source)
         self.assertNotIn('"PUT"', source)
         self.assertNotIn("chat/completions", source)
         self.assertNotIn("jina", source.lower())
         self.assertNotIn("ARTICLE_MODEL", skill)
-        self.assertIn("标题", skill)
-        self.assertIn("整段 markdown", skill)
+        self.assertNotIn("DailyTable", source)
+        self.assertNotIn("batch_delete", source)
+        self.assertNotIn("tblRwSj33U1e4t4N", source)
+        self.assertNotIn("bitable", source)
+        self.assertIn("def send_file", push_source)
+        self.assertIn("oc_27040b0dc3a733ab164199154c489fad", push_source)
 
 
 if __name__ == "__main__":

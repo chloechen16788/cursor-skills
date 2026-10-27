@@ -1,6 +1,6 @@
 ---
 name: cision-mentions
-description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间昨天 07:00 至今天 07:00 拉取 CSV、与上次全量去重，并推送增量。stream 1017610 在同一次运行里、增量非空时，接着用 Firecrawl 抓取正文，标题用 CSV，正文保存整段 markdown，写入当日多维表格。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
+description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间昨天 07:00 至今天 07:00 拉取 CSV、与上次全量去重，并推送增量。stream 1017610 在同一次运行里、增量非空时，接着用 Firecrawl 抓取正文，标题用 CSV，正文保存整段 markdown，追加到 CSV 后只把文件发到固定群。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
 ---
 
 # Cision mentions 导出
@@ -10,7 +10,7 @@ description: 导出 Cision / Streem mentions。列出监测流的 id 与 label�
 - 列出账号下的 Mention Stream，只打印 `id` 和 `label`。
 - 已有 stream id 时，导出该流在固定时间窗内的 mentions CSV，并与上一份全量去重。
 - 两条命令分开调用。导出 mentions 时不要先调用列表接口。
-- stream `1017610` 的同一次运行里，导出完成且 `delta_rows` 大于 0 之后，再抓取正文，写入当日表。增量为 0 则停，不抓取，也不再发一条消息。
+- stream `1017610` 的同一次运行里，导出完成且 `delta_rows` 大于 0 之后，再抓取正文，把带正文的 CSV 发到固定群。增量为 0 则停，不抓取，也不再发一条消息。
 
 基址是 `https://api.cision.one`。认证用请求头 `X-Auth-Token`，值只从环境变量 `CISION_API_TOKEN` 读取。不要把 token 放到命令行参数里，不要打印它，也不要写进日志。
 
@@ -150,7 +150,7 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 
 本技能没有飞书群机器人 Webhook，也不读取除此之外的密钥。
 
-## 正文与当日表（仅 1017610，紧接导出）
+## 正文文件（仅 1017610，紧接导出）
 
 这一步和导出在同一次运行里串行完成，不是第二条定时任务。先跑导出。标准输出里的 `delta_rows` 为 0 时不要抓取，也不要再发一条飞书消息。大于 0 时，只用这一次写出的 `delta.csv`。
 
@@ -158,37 +158,30 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <delta.csv> --after <after>
 ```
 
-`--after` 用导出标准输出里的 `after`。不传时，从 `delta.csv` 的父目录名还原窗口起点。数据日期是这个起点在 Asia/Shanghai 的日历日。运行日 2026-10-26 的窗口起点是 2026-10-25 07:00+08，数据日期是 `2026-10-25`。
+`--after` 用导出标准输出里的 `after`。不传时，从 `delta.csv` 的父目录名还原窗口起点。数据日期是这个起点在 Asia/Shanghai 的日历日。运行日 2026-10-26 的窗口起点是 2026-10-25 07:00+08，数据日期是 `2026-10-25`。数据日期只出现在标准输出，不另发一条群文本。
 
-抓取在脚本里成批进行，调用 PATH 上的 `firecrawl scrape --only-main-content`。找不到命令时，和缺密钥一样，在删除之前停止。不要让 agent 每个 URL 单独开一轮。以后会有几百条 URL。密钥只从环境变量 `FIRECRAWL_API_KEY` 读取，不要写进命令行。
+抓取在脚本里成批进行，调用 PATH 上的 `firecrawl scrape --only-main-content`。找不到命令时，和缺密钥一样，在发送文件之前停止。不要让 agent 每个 URL 单独开一轮。以后会有几百条 URL。密钥只从环境变量 `FIRECRAWL_API_KEY` 读取，不要写进命令行。
 
-不做模型清洗。`标题` 用 CSV 的 `title`。`正文` 保存 Firecrawl 返回的整段 markdown，脚本不删导航、不改写、不摘要，避免后面再抽取时丢掉原文。单条超过飞书单元格上限时只截断到上限，并在 `错误` 里注明。
+不做模型清洗。`标题` 就是增量 CSV 里的 `title` 列，脚本不改这一列，也不另写标题。`正文` 是新增列，保存 Firecrawl 返回的整段 markdown，不删导航、不改写、不摘要、不截断，避免后面再抽取时丢掉原文。输出用 CSV，不用 Excel：xlsx 单元格上限是 32767 个字符，整段 markdown 会更长；CSV 会给含换行、逗号和引号的字段加引号，可以原样放下。文件写在增量旁边，名字是 `delta-bodies.csv`。同一 url 的重复行都保留，并填入同一段 markdown。抓取失败的行仍保留，正文为空。
 
-某一条 URL 抓取失败时，这一行仍写入：正文为空，`错误` 写原因，`标题` 仍用 CSV 里的标题。其他行照常写入。只要当日表写入成功，就向群发链接。
+写文件前如果没有 `FIRECRAWL_API_KEY`，立刻停止，不要发送文件。不要把密钥打进命令行。
 
-写入前如果没有 `FIRECRAWL_API_KEY`，立刻停止，不要删除飞书记录。不要把密钥打进命令行。
-
-当日表标识写死：
+不要把正文写进当日表，也不要删除记录或新建字段。当日表保持不动：
 
 - wiki：`https://prnewswire.feishu.cn/wiki/E3ABwkrHKiC6U4kdbKMcRRtdnYc?table=tblRwSj33U1e4t4N&view=vew0Gce8xU`
 - wiki node token：`E3ABwkrHKiC6U4kdbKMcRRtdnYc`
 - table id：`tblRwSj33U1e4t4N`
 - view id：`vew0Gce8xU`
-
-每次运行都先 `GET /open-apis/wiki/v2/spaces/get_node`，用返回的 `obj_token`（`obj_type=bitable`）调用 `/bitable/v1/apps/{obj_token}`。不要把 wiki node token 当作 app token，否则 HTTP 404。当前这个节点的 `obj_token` 是 `MbglbIcF6aKwyXsCW7QcSTbIncb`，和 wiki token 不同；代码仍以当次 `get_node` 的结果为准。
-
-表里原来的字段 `文本` 保留。缺这些文本字段就新建：`id`、`url`、`标题`、`正文`、`错误`。这一步不改表名。如果以后要改表名，只能 `PATCH .../tables/{table}`，请求体只有 `name`。不要用 `PUT`。
+- 该节点的 `obj_token` 是 `MbglbIcF6aKwyXsCW7QcSTbIncb`。正文步骤不调用它。
 
 顺序固定：
 
-1. 确认密钥。缺失则停止，不删除。
-2. 按 url 去重后抓取。正文保存整段 markdown。单条失败只记在该行。
-3. 解析 wiki，补齐字段。这一步失败则不删除。
-4. 删除当日表里的全部记录。
-5. 只写入这一次的新行。表里必须只剩这一批，不要追加。
-6. 写入成功后，向群 `oc_27040b0dc3a733ab164199154c489fad` 发一条文本，两行：数据日期，以及上面的 wiki 链接（带 table 和 view）。不发正文文件，也不发到别的会话。
+1. 确认密钥和 `firecrawl` 命令。缺失则停止，不发送文件，也不访问当日表。
+2. 按 url 去重后抓取。每一行增量都保留。正文保存整段 markdown。
+3. 写成 `delta-bodies.csv`。原有列顺序不变，最后追加 `正文`。
+4. 只向群 `oc_27040b0dc3a733ab164199154c489fad` 发这一个文件。不发到别的会话，不发当日表链接，不改当日表。
 
-比较用的「百度海外竞品最新数据」仍只由导出步骤整表重写。这一步不读、不删那张表。
+比较用的「百度海外竞品最新数据」仍只由导出步骤整表重写。这一步不读、不删那张表，也不读、不删当日表。
 
 ## 定时运行
 
@@ -200,8 +193,8 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 
 1. 触发器选 Scheduled。07:00 那套只用 `0 23 * * *`，18:30 那套只用 `30 10 * * *`。Automations 的 cron 按 UTC 计算。数据窗口都是昨天 07:00（含）到今天 07:00（不含），不要改窗口。文档写明可以延迟触发，但不会早于设定时间开始。
 2. 选中本仓库。cron 类触发器默认可以不带仓库；不带仓库时 agent 拿不到这份脚本。
-3. 提示词先运行 `export_mentions.py --stream-id 1017610`。看标准输出的 `delta_rows`。等于 0 就停，不要抓正文，不要发第二条消息。大于 0 时，用同一次输出的 `delta_csv` 和 `after` 运行 `extract_bodies.py`。不要逐条 URL 另开对话。不要打印 token、密钥或 mention 正文。不要再传 chat id、wiki 或 table id。其他 stream 需要推群时才给导出命令加 `--push-feishu`，并且不要跑正文脚本。
-4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。正文步骤还要 `FIRECRAWL_API_KEY`。缺抓取密钥时，脚本在删除当日表之前停止。新的 cloud agent 在启动时会注入已保存的 Runtime Secret，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
+3. 提示词先运行 `export_mentions.py --stream-id 1017610`。看标准输出的 `delta_rows`。等于 0 就停，不要抓正文，不要发第二条消息。大于 0 时，用同一次输出的 `delta_csv` 和 `after` 运行 `extract_bodies.py`。不要逐条 URL 另开对话。不要打印 token、密钥或 mention 正文。不要再传 chat id、wiki 或 table id。不要把正文写入当日表。其他 stream 需要推群时才给导出命令加 `--push-feishu`，并且不要跑正文脚本。
+4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。正文步骤还要 `FIRECRAWL_API_KEY`。缺抓取密钥时，脚本在发送正文文件之前停止，也不改当日表。新的 cloud agent 在启动时会注入已保存的 Runtime Secret，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
 
 **文档没有保证、因此这里不当作已支持能力的部分。**
 
@@ -215,5 +208,5 @@ python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <de
 - 不要把 `CISION_API_TOKEN`、`FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FIRECRAWL_API_KEY` 或 tenant access token 打进命令行、日志、提交或对话。
 - 不要提交 `full.csv`、`delta.csv`、`latest.csv` 或任何 mention 导出。
 - 汇报结果时只给行数、窗口和路径，不粘贴 mention 标题或正文。
-- 不要把正文文件发到群里，也不要发到 `oc_27040b0dc3a733ab164199154c489fad` 以外的会话。
+- 正文 CSV 只发到 `oc_27040b0dc3a733ab164199154c489fad`，不要发到其他会话，也不要写入当日表。
 - 不要逐条 URL 让 agent 循环。抓取在 `extract_bodies.py` 里完成。

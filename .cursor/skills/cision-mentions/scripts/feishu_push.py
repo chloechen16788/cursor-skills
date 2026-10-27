@@ -210,6 +210,13 @@ def send_text(text: str) -> None:
     _send_message(_tenant_access_token(), "text", {"text": text})
 
 
+def send_file(path: Path) -> None:
+    """只向固定群发一个文件，不发文本，也不写多维表格。"""
+    token = _tenant_access_token()
+    file_key = _upload_file(token, path)
+    _send_message(token, "file", {"file_key": file_key})
+
+
 def _open_api_path(url: str) -> str:
     marker = "/open-apis"
     index = url.find(marker)
