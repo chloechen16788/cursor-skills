@@ -217,6 +217,20 @@ def send_file(path: Path) -> None:
     _send_message(token, "file", {"file_key": file_key})
 
 
+def send_body_update(text: str, path: Path) -> None:
+    """向固定群先发一段计数说明，再发带 content 列的 CSV。不写多维表格。"""
+    token = _tenant_access_token()
+    try:
+        _send_message(token, "text", {"text": text})
+    except Exception as error:  # noqa: BLE001
+        raise RuntimeError(f"说明发送失败，文件未发送：{error}") from None
+    try:
+        file_key = _upload_file(token, path)
+        _send_message(token, "file", {"file_key": file_key})
+    except Exception as error:  # noqa: BLE001
+        raise RuntimeError(f"说明已发送，文件发送失败：{error}") from None
+
+
 def _open_api_path(url: str) -> str:
     marker = "/open-apis"
     index = url.find(marker)

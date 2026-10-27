@@ -43,11 +43,11 @@ class BodyExtractTest(unittest.TestCase):
             {"markdown": MESSY, "error": ""},
         )
         self.assertEqual(record["标题"], "CSV title stays")
-        self.assertEqual(record["正文"], MESSY)
+        self.assertEqual(record["content"], MESSY)
         self.assertIn(
-            "[Skip to content](https://news.example/story#content)", record["正文"]
+            "[Skip to content](https://news.example/story#content)", record["content"]
         )
-        self.assertIn("# Advertisement", record["正文"])
+        self.assertIn("# Advertisement", record["content"])
         self.assertEqual(record["错误"], "")
 
     def test_markdown_is_not_rewritten_or_truncated(self) -> None:
@@ -57,17 +57,17 @@ class BodyExtractTest(unittest.TestCase):
             {"markdown": markdown, "error": ""},
         )
         self.assertEqual(record["标题"], "Final")
-        self.assertEqual(record["正文"], markdown)
+        self.assertEqual(record["content"], markdown)
         long_markdown = "段" * 100001
         long_record = body_extract.build_record(
             {"id": "2", "url": "https://news.example/b", "csv_title": "Long"},
             {"markdown": long_markdown, "error": ""},
         )
-        self.assertEqual(len(long_record["正文"]), 100001)
-        self.assertEqual(long_record["正文"], long_markdown)
+        self.assertEqual(len(long_record["content"]), 100001)
+        self.assertEqual(long_record["content"], long_markdown)
 
     def test_csv_roundtrip_keeps_title_and_full_markdown(self) -> None:
-        sent: list[Path] = []
+        sent: list[tuple[str, Path]] = []
         header = ["id", "url", "title"]
         rows = [
             ["1", "https://news.example/good", "csv good, still"],
@@ -91,12 +91,12 @@ class BodyExtractTest(unittest.TestCase):
                 rows=rows,
                 after=AFTER,
                 scrape=scrape,
-                send=sent.append,
+                send=lambda text, path: sent.append((text, path)),
                 dest=dest,
                 secrets_ok=True,
             )
             out_header, out_rows = body_extract.read_bodies_csv(dest)
-        self.assertEqual(out_header, ["id", "url", "title", "正文"])
+        self.assertEqual(out_header, ["id", "url", "title", "content"])
         self.assertEqual(len(out_rows), 3)
         self.assertEqual(out_rows[0][2], "csv good, still")
         self.assertEqual(out_rows[0][3], MESSY)
@@ -104,7 +104,14 @@ class BodyExtractTest(unittest.TestCase):
         self.assertEqual(out_rows[1][3], "")
         self.assertEqual(out_rows[2][2], "duplicate")
         self.assertEqual(out_rows[2][3], MESSY)
-        self.assertEqual(sent, [dest])
+        self.assertEqual(len(sent), 1)
+        notice, sent_path = sent[0]
+        self.assertEqual(sent_path, dest)
+        self.assertIn("data_date=2026-10-25", notice)
+        self.assertIn("delta_rows=3", notice)
+        self.assertIn("fetched=2", notice)
+        self.assertIn("failed=1", notice)
+        self.assertNotIn("csv good", notice)
         self.assertEqual(summary["feishu"], "sent")
         self.assertEqual(summary["delta_rows"], 3)
         self.assertEqual(summary["body_rows"], 3)
@@ -119,7 +126,7 @@ class BodyExtractTest(unittest.TestCase):
         def scrape(urls: list[str]) -> dict:
             raise AssertionError("增量为 0 时不应抓取")
 
-        def send(path: Path) -> None:
+        def send(text: str, path: Path) -> None:
             raise AssertionError("增量为 0 时不应发文件")
 
         summary = body_extract.run_bodies(
@@ -143,7 +150,7 @@ class BodyExtractTest(unittest.TestCase):
         def scrape(urls: list[str]) -> dict:
             raise AssertionError("缺密钥时不应抓取")
 
-        def send(path: Path) -> None:
+        def send(text: str, path: Path) -> None:
             raise AssertionError("缺密钥时不应发送")
 
         with self.assertRaises(RuntimeError) as caught:
@@ -161,7 +168,7 @@ class BodyExtractTest(unittest.TestCase):
         self.assertIn("没有改当日表", str(caught.exception))
 
     def test_write_failure_does_not_send(self) -> None:
-        sent: list[Path] = []
+        sent: list[tuple[str, Path]] = []
 
         def scrape(urls: list[str]) -> dict:
             return {urls[0]: {"markdown": MESSY, "error": ""}}
@@ -176,7 +183,7 @@ class BodyExtractTest(unittest.TestCase):
                     rows=[["1", "https://news.example/a", "t"]],
                     after=AFTER,
                     scrape=scrape,
-                    send=sent.append,
+                    send=lambda text, path: sent.append((text, path)),
                     dest=dest,
                     secrets_ok=True,
                 )
@@ -187,7 +194,7 @@ class BodyExtractTest(unittest.TestCase):
         def scrape(urls: list[str]) -> dict:
             return {urls[0]: {"markdown": MESSY, "error": ""}}
 
-        def send(path: Path) -> None:
+        def send(text: str, path: Path) -> None:
             raise RuntimeError("上传 500")
 
         with tempfile.TemporaryDirectory(prefix="cision-bodies-") as temporary:
@@ -204,9 +211,9 @@ class BodyExtractTest(unittest.TestCase):
                 )
             self.assertTrue(dest.is_file())
             header, rows = body_extract.read_bodies_csv(dest)
-        self.assertEqual(header[-1], "正文")
+        self.assertEqual(header[-1], "content")
         self.assertEqual(rows[0][-1], MESSY)
-        self.assertIn("群文件发送失败", str(caught.exception))
+        self.assertIn("群消息发送失败", str(caught.exception))
         self.assertIn(str(dest), str(caught.exception))
 
     def test_data_date_and_delta_path(self) -> None:
@@ -279,7 +286,9 @@ class BodyExtractTest(unittest.TestCase):
         self.assertNotIn("batch_delete", source)
         self.assertNotIn("tblRwSj33U1e4t4N", source)
         self.assertNotIn("bitable", source)
-        self.assertIn("def send_file", push_source)
+        self.assertIn("def send_body_update", push_source)
+        self.assertIn("content", skill)
+        self.assertNotIn("BODY_COLUMN = \"正文\"", source)
         self.assertIn("oc_27040b0dc3a733ab164199154c489fad", push_source)
 
 

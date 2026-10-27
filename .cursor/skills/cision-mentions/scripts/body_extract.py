@@ -15,7 +15,7 @@ from pathlib import Path
 import cision_lib
 import feishu_push
 
-BODY_COLUMN = "正文"
+BODY_COLUMN = "content"
 
 
 def missing_firecrawl_message() -> str:
@@ -86,13 +86,25 @@ def bodies_csv_path(delta_path: Path) -> Path:
     return delta_path.with_name(f"{delta_path.stem}-bodies.csv")
 
 
+def body_notice(summary: dict) -> str:
+    """群里的短文本：数据日期、行数、抓到多少、失败多少。不含标题和正文。"""
+    return "\n".join(
+        [
+            f"data_date={summary['data_date']}",
+            f"delta_rows={summary['delta_rows']}",
+            f"fetched={summary['scraped_ok']}",
+            f"failed={summary['scraped_failed']}",
+        ]
+    )
+
+
 def build_record(item: dict, fetched: dict | None) -> dict:
-    """标题只用 CSV。正文保存 Firecrawl markdown，不交给模型改写，也不截断。"""
+    """标题只用 CSV。content 保存 Firecrawl markdown，不交给模型改写，也不截断。"""
     record = {
         "id": item.get("id") or "",
         "url": item.get("url") or "",
         "标题": item.get("csv_title") or "",
-        "正文": "",
+        "content": "",
         "错误": "",
     }
     if not record["url"]:
@@ -109,7 +121,7 @@ def build_record(item: dict, fetched: dict | None) -> dict:
     if not markdown.strip():
         record["错误"] = "抓取结果为空"
         return record
-    record["正文"] = markdown
+    record["content"] = markdown
     record["错误"] = ""
     return record
 
@@ -127,11 +139,11 @@ def _pad(row: list[str], width: int) -> list[str]:
 def write_bodies_csv(
     path: Path, header: list[str], rows: list[list[str]], bodies: list[str]
 ) -> None:
-    """在原增量列后追加正文。CSV 能放下超长换行文本；xlsx 单元格上限是 32767。"""
+    """在原增量列后追加 content。CSV 能放下超长换行文本；xlsx 单元格上限是 32767。"""
     if len(rows) != len(bodies):
-        raise RuntimeError("正文行数和增量行数不一致，未发送文件")
+        raise RuntimeError("content 行数和增量行数不一致，未发送文件")
     if BODY_COLUMN in header:
-        raise RuntimeError("增量 CSV 已有正文列，未发送文件")
+        raise RuntimeError("增量 CSV 已有 content 列，未发送文件")
     cision_lib.ensure_output_dir(path.parent)
     path.parent.mkdir(parents=True, exist_ok=True)
     width = len(header)
@@ -253,18 +265,26 @@ def run_bodies(
         else:
             scraped_ok += 1
         record = build_record(item, result)
-        if record["正文"]:
+        if record["content"]:
             stored_ok += 1
-        bodies.append(record["正文"])
+        bodies.append(record["content"])
 
     try:
         write_bodies_csv(dest, header, data_rows, bodies)
     except Exception as error:  # noqa: BLE001
         raise RuntimeError(f"正文文件没有写成，未发送：{error}") from None
+    notice = body_notice(
+        {
+            "data_date": data_date,
+            "delta_rows": len(data_rows),
+            "scraped_ok": scraped_ok,
+            "scraped_failed": scraped_failed,
+        }
+    )
     try:
-        send(dest)
+        send(notice, dest)
     except Exception as error:  # noqa: BLE001
-        raise RuntimeError(f"正文文件已写到 {dest}，群文件发送失败：{error}") from None
+        raise RuntimeError(f"正文文件已写到 {dest}，群消息发送失败：{error}") from None
     return {
         "bodies": "written",
         "delta_rows": len(data_rows),
@@ -275,6 +295,7 @@ def run_bodies(
         "stored_ok": stored_ok,
         "body_rows": len(data_rows),
         "body_csv": str(dest),
+        "notice": notice,
         "feishu": "sent",
     }
 
@@ -318,7 +339,7 @@ def run_delta_file(
             rows=rows,
             after=window,
             scrape=lambda urls: scrape_urls(urls, directory, workers=workers),
-            send=feishu_push.send_file,
+            send=feishu_push.send_body_update,
             dest=dest,
             secrets_ok=blocked is None,
             secret_error=blocked or "",
