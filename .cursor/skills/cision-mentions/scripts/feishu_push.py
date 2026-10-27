@@ -30,12 +30,26 @@ BITABLE_API = "https://open.feishu.cn/open-apis/bitable/v1"
 BITABLE_BATCH = 500
 
 
-def _error_fields(body: bytes, status: int) -> str:
-    text = body.decode("utf-8", errors="replace")
-    for key in ("FEISHU_APP_SECRET", "FEISHU_APP_ID", "CISION_API_TOKEN"):
+_SECRET_ENV_KEYS = (
+    "FEISHU_APP_SECRET",
+    "FEISHU_APP_ID",
+    "CISION_API_TOKEN",
+    "FIRECRAWL_API_KEY",
+    "ARTICLE_MODEL_API_KEY",
+    "OPENAI_API_KEY",
+)
+
+
+def redact_secrets(text: str) -> str:
+    for key in _SECRET_ENV_KEYS:
         secret = os.environ.get(key, "")
         if secret and secret in text:
             text = text.replace(secret, "[REDACTED]")
+    return text
+
+
+def _error_fields(body: bytes, status: int) -> str:
+    text = redact_secrets(body.decode("utf-8", errors="replace"))
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
@@ -63,20 +77,21 @@ def _post(url: str, data: bytes, headers: dict[str, str]) -> dict:
         raise RuntimeError(f"飞书响应不是 JSON（{error}）") from None
     code = payload.get("code")
     if code not in (0, None):
-        raise RuntimeError(f"飞书接口 code={code} msg={_redact(str(payload.get('msg')))}")
+        raise RuntimeError(
+            f"飞书接口 code={code} msg={_redact(str(payload.get('msg')))}"
+        )
     return payload
 
 
 def _redact(text: str) -> str:
-    for key in ("FEISHU_APP_SECRET", "FEISHU_APP_ID", "CISION_API_TOKEN"):
-        secret = os.environ.get(key, "")
-        if secret and secret in text:
-            text = text.replace(secret, "[REDACTED]")
-    return text
+    return redact_secrets(text)
 
 
 def credentials_present() -> bool:
-    return bool(os.environ.get("FEISHU_APP_ID", "").strip() and os.environ.get("FEISHU_APP_SECRET", "").strip())
+    return bool(
+        os.environ.get("FEISHU_APP_ID", "").strip()
+        and os.environ.get("FEISHU_APP_SECRET", "").strip()
+    )
 
 
 def missing_credentials_message() -> str:
@@ -93,7 +108,9 @@ def _tenant_access_token() -> str:
     if not app_id or not app_secret:
         raise RuntimeError(missing_credentials_message())
     body = json.dumps({"app_id": app_id, "app_secret": app_secret}).encode("utf-8")
-    payload = _post(TOKEN_URL, body, {"Content-Type": "application/json; charset=utf-8"})
+    payload = _post(
+        TOKEN_URL, body, {"Content-Type": "application/json; charset=utf-8"}
+    )
     token = payload.pop("tenant_access_token", None)
     if not token:
         raise RuntimeError(
@@ -178,13 +195,30 @@ def push_delta(delta_path: Path, summary: dict) -> None:
         _send_message(token, "file", {"file_key": file_key})
 
 
+def api_request(
+    url: str, method: str, payload: dict | None = None, token: str | None = None
+) -> dict:
+    return _request(url, method, payload, token)
+
+
+def tenant_token() -> str:
+    return _tenant_access_token()
+
+
+def send_text(text: str) -> None:
+    """只发一条文本，不上传文件。目标群仍是写死的 FEISHU_CHAT_ID。"""
+    _send_message(_tenant_access_token(), "text", {"text": text})
+
+
 def _open_api_path(url: str) -> str:
     marker = "/open-apis"
     index = url.find(marker)
     return url[index:] if index >= 0 else url
 
 
-def _request(url: str, method: str, payload: dict | None = None, token: str | None = None) -> dict:
+def _request(
+    url: str, method: str, payload: dict | None = None, token: str | None = None
+) -> dict:
     headers: dict[str, str] = {}
     data = None
     if token:
@@ -242,7 +276,9 @@ class FeishuBitable:
         return self._token
 
     def _url(self, suffix: str, query: dict | None = None) -> str:
-        base = f"{BITABLE_API}/apps/{BITABLE_APP_TOKEN}/tables/{BITABLE_TABLE_ID}{suffix}"
+        base = (
+            f"{BITABLE_API}/apps/{BITABLE_APP_TOKEN}/tables/{BITABLE_TABLE_ID}{suffix}"
+        )
         if not query:
             return base
         return base + "?" + urlencode(query)
@@ -310,9 +346,14 @@ class FeishuBitable:
             query = {"page_size": 100}
             if page_token:
                 query["page_token"] = page_token
-            data = self._get_data(f"{BITABLE_API}/apps/{BITABLE_APP_TOKEN}/tables?{urlencode(query)}")
+            data = self._get_data(
+                f"{BITABLE_API}/apps/{BITABLE_APP_TOKEN}/tables?{urlencode(query)}"
+            )
             for item in data.get("items") or []:
-                if not isinstance(item, dict) or item.get("table_id") != BITABLE_TABLE_ID:
+                if (
+                    not isinstance(item, dict)
+                    or item.get("table_id") != BITABLE_TABLE_ID
+                ):
                     continue
                 found = True
                 current = str(item.get("name") or "")
@@ -327,17 +368,32 @@ class FeishuBitable:
         if current == BITABLE_TABLE_NAME:
             return
         # 更新数据表只有 PATCH。PUT 同一路径会返回 HTTP 404，正文是「404 page not found」。
-        _request(self._url(""), "PATCH", {"name": BITABLE_TABLE_NAME}, token=self._bearer())
+        _request(
+            self._url(""), "PATCH", {"name": BITABLE_TABLE_NAME}, token=self._bearer()
+        )
 
     def delete_records(self, record_ids: list[str]) -> None:
         for start in range(0, len(record_ids), BITABLE_BATCH):
             chunk = record_ids[start : start + BITABLE_BATCH]
-            _request(self._url("/records/batch_delete"), "POST", {"records": chunk}, token=self._bearer())
+            _request(
+                self._url("/records/batch_delete"),
+                "POST",
+                {"records": chunk},
+                token=self._bearer(),
+            )
 
     def create_records(self, field_rows: list[dict]) -> None:
         for start in range(0, len(field_rows), BITABLE_BATCH):
-            chunk = [{"fields": fields} for fields in field_rows[start : start + BITABLE_BATCH]]
-            _request(self._url("/records/batch_create"), "POST", {"records": chunk}, token=self._bearer())
+            chunk = [
+                {"fields": fields}
+                for fields in field_rows[start : start + BITABLE_BATCH]
+            ]
+            _request(
+                self._url("/records/batch_create"),
+                "POST",
+                {"records": chunk},
+                token=self._bearer(),
+            )
 
 
 def _previous_ids(field_names: list[str], records: list[dict]) -> set[str]:
@@ -364,7 +420,14 @@ def _field_rows(header: list[str], rows: list[list[str]]) -> list[dict]:
     return payloads
 
 
-def sync_1017610_baseline(header: list[str], rows: list[list[str]], delta_path: Path, summary: dict, client=None, push=None) -> dict:
+def sync_1017610_baseline(
+    header: list[str],
+    rows: list[list[str]],
+    delta_path: Path,
+    summary: dict,
+    client=None,
+    push=None,
+) -> dict:
     """先读 id。读失败则不删除。再删光表，写入本次全量，最后才推增量 CSV。"""
     import cision_lib
 
@@ -399,11 +462,15 @@ def sync_1017610_baseline(header: list[str], rows: list[list[str]], delta_path: 
     except Exception as error:
         raise RuntimeError(f"准备多维表格字段失败，未删除任何记录：{error}") from None
 
-    record_ids = [str(record.get("record_id")) for record in records if record.get("record_id")]
+    record_ids = [
+        str(record.get("record_id")) for record in records if record.get("record_id")
+    ]
     try:
         client.delete_records(record_ids)
     except Exception as error:
-        raise RuntimeError(f"删除多维表格记录失败，未写入新记录，也未推送：{error}") from None
+        raise RuntimeError(
+            f"删除多维表格记录失败，未写入新记录，也未推送：{error}"
+        ) from None
     try:
         client.create_records(_field_rows(header, rows))
     except Exception as error:
