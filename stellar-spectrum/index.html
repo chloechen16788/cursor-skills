@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>恒星光谱生命推演</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23ffb000'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/game.css?v=4" />
+</head>
+<body>
+  <div id="app">
+    <section id="screen-home" class="screen starfield active">
+      <div class="home-top">
+        <h1 class="gold-title">恒星光谱生命推演</h1>
+        <div class="mass-pill">您当前的质量为：<span id="mass-text">0</span> ☀️</div>
+      </div>
+      <div class="home-mid">
+        <div>
+          <form id="search-form">
+            <input id="search-input" class="search-box" type="text" placeholder="搜索框" autocomplete="off" aria-label="搜索框" />
+          </form>
+          <div class="spec-panel" id="spec-panel">
+            <h2>光谱类型：</h2>
+            <p><button type="button" data-q="O2">O2</button>、<button type="button" data-q="O5">O5</button></p>
+            <p><button type="button" data-q="O9">O9</button>、<button type="button" data-q="B0">B0</button></p>
+            <p><button type="button" data-q="B5">B5</button>、<button type="button" data-q="B9">B9</button></p>
+            <p><button type="button" data-q="M0">M0</button>、<button type="button" data-q="M9">M9</button></p>
+            <p><button type="button" data-q="L">L</button>、<button type="button" data-q="K">K</button>、<button type="button" data-q="G">G</button></p>
+            <p><button type="button" data-q="F">F</button>、<button type="button" data-q="A">A</button></p>
+          </div>
+        </div>
+        <div></div>
+        <button type="button" id="btn-lecturer" class="lecturer-hit" aria-label="讲解师">
+          <svg class="flame" viewBox="0 0 200 150" aria-hidden="true">
+            <defs>
+              <radialGradient id="fg1" cx="45%" cy="55%" r="55%">
+                <stop offset="0%" stop-color="#fff6b0"/>
+                <stop offset="42%" stop-color="#ffb000"/>
+                <stop offset="100%" stop-color="#ff3b00"/>
+              </radialGradient>
+            </defs>
+            <path fill="url(#fg1)" d="M28 108c8-36 22-28 30-58 6 22 8 8 16-16 8 26 18 16 24 36 16-30 34-8 40 14 12 4 22 2 28-14 6 22 2 40-16 52-22 16-48 20-78 16-26 2-40-8-44-30z"/>
+            <path fill="#ffd24a" d="M18 96c14 8 20-10 28-6 6 16-8 28-24 22z"/>
+            <path fill="#ff7a18" d="M150 70c18 6 22 28 8 36-16 2-28-12-24-28 2-6 8-10 16-8z"/>
+            <g transform="translate(48 78)">
+              <path d="M8 18c8-16 28-16 36 0-8 8-28 8-36 0z" fill="#111"/>
+              <path d="M62 18c8-16 28-16 36 0-8 8-28 8-36 0z" fill="#111"/>
+              <ellipse cx="26" cy="16" rx="16" ry="9" fill="#fff"/>
+              <ellipse cx="80" cy="16" rx="16" ry="9" fill="#fff"/>
+              <ellipse cx="28" cy="16" rx="5" ry="5" fill="#111"/>
+              <ellipse cx="82" cy="16" rx="5" ry="5" fill="#111"/>
+            </g>
+          </svg>
+          <span>讲解师</span>
+        </button>
+      </div>
+      <button type="button" id="btn-wheel" class="wheel-badge" aria-label="幸运大转盘"><span>幸运<br>大转盘</span></button>
+      <div class="footer">原创为：我</div>
+    </section>
+
+    <section id="screen-wheel" class="screen starfield">
+      <button type="button" class="x" id="wheel-close" aria-label="关闭">×</button>
+      <div class="wheel-result" id="wheel-result"></div>
+      <div class="wheel-wrap">
+        <div class="wheel" id="wheel"></div>
+        <div class="wheel-core">幸运<br>大转盘</div>
+        <div class="arrow" id="arrow">
+          <svg viewBox="0 0 36 150" width="36" height="100%">
+            <polygon points="18,2 33,34 23,34 23,46 13,46 13,34 3,34" fill="#fff"/>
+            <line x1="18" y1="50" x2="18" y2="146" stroke="#fff" stroke-width="4" stroke-dasharray="8 7" stroke-linecap="butt"/>
+          </svg>
+        </div>
+      </div>
+      <div class="spin-left" id="spin-left"></div>
+      <button type="button" class="wheel-go" id="wheel-start">开始</button>
+      <div class="wheel-char" aria-hidden="true">
+        <svg class="flame" viewBox="0 0 200 150">
+          <path fill="#ffb000" d="M28 108c8-36 22-28 30-58 6 22 8 8 16-16 8 26 18 16 24 36 16-30 34-8 40 14 12 4 22 2 28-14 6 22 2 40-16 52-22 16-48 20-78 16-26 2-40-8-44-30z"/>
+          <g transform="translate(48 78)">
+            <ellipse cx="26" cy="16" rx="16" ry="9" fill="#fff"/>
+            <ellipse cx="80" cy="16" rx="16" ry="9" fill="#fff"/>
+            <ellipse cx="28" cy="16" rx="5" ry="5" fill="#111"/>
+            <ellipse cx="82" cy="16" rx="5" ry="5" fill="#111"/>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <section id="screen-lecturer" class="screen starfield">
+      <button type="button" class="x" id="lecturer-close" aria-label="关闭">×</button>
+      <form id="redeem-form" class="redeem-form">
+        <input id="redeem-input" type="text" placeholder="输入兑换码……" autocomplete="off" aria-label="输入兑换码" />
+      </form>
+      <div class="redeem-note" id="redeem-note"></div>
+      <div class="lecturer-layout">
+        <svg class="flame" viewBox="0 0 200 150" aria-hidden="true">
+          <path fill="#ff9a00" d="M20 110c12-48 28-30 36-66 8 24 10 8 20-18 8 30 22 18 26 42 20-34 40-6 46 16 14 6 24 2 30-16 8 26 0 46-20 58-24 16-50 22-84 16-30 2-46-8-54-32z"/>
+          <g transform="translate(46 76)">
+            <ellipse cx="28" cy="18" rx="18" ry="10" fill="#fff"/>
+            <ellipse cx="86" cy="18" rx="18" ry="10" fill="#fff"/>
+            <ellipse cx="30" cy="18" rx="5" ry="5" fill="#111"/>
+            <ellipse cx="88" cy="18" rx="5" ry="5" fill="#111"/>
+          </g>
+        </svg>
+        <div id="ring" class="ring" aria-live="polite"><div id="ring-text" class="ring-text"></div></div>
+      </div>
+      <form id="ask-form" class="ask-form">
+        <input id="ask-input" type="text" placeholder="输入问题……" autocomplete="off" aria-label="输入问题" />
+      </form>
+    </section>
+
+    <section id="screen-fail" class="screen">
+      <button type="button" class="x" id="fail-close" aria-label="关闭">×</button>
+      <div class="flame-banner"><span class="flames"></span>您搜到了一个棍母 🤔</div>
+      <svg class="tiger" viewBox="0 0 200 180" aria-hidden="true">
+        <defs>
+          <radialGradient id="tg" cx="50%" cy="45%" r="60%">
+            <stop offset="0%" stop-color="#fff1a8"/>
+            <stop offset="45%" stop-color="#ffb000"/>
+            <stop offset="100%" stop-color="#ff4d00"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="100" cy="96" rx="70" ry="62" fill="url(#tg)"/>
+        <path d="M48 70c-20-40 10-58 28-28" fill="#ff7a00"/>
+        <path d="M152 70c20-40-10-58-28-28" fill="#ff7a00"/>
+        <path d="M70 54l8 16M90 46l4 18M110 46l-4 18M128 54l-8 16" stroke="#7a2a00" stroke-width="4"/>
+        <ellipse cx="78" cy="96" rx="10" ry="12" fill="#2a1200"/>
+        <ellipse cx="122" cy="96" rx="10" ry="12" fill="#2a1200"/>
+        <ellipse cx="80" cy="94" rx="3" ry="4" fill="#fff"/>
+        <ellipse cx="124" cy="94" rx="3" ry="4" fill="#fff"/>
+        <path d="M100 108l-8 10h16z" fill="#5a1800"/>
+        <path d="M70 128c10 16 50 16 60 0" fill="none" stroke="#5a1800" stroke-width="4"/>
+        <path d="M86 132l6 14M100 134l0 16M114 132l-6 14" stroke="#fff" stroke-width="3"/>
+      </svg>
+    </section>
+
+    <section id="screen-unlock" class="screen">
+      <h2 class="gold-title unlock-title">是否开启恒星光谱生命推演？</h2>
+      <div class="dash-circle">
+        <img id="unlock-star" alt="" />
+        <div class="dash-cost" id="unlock-cost"></div>
+      </div>
+      <div class="unlock-line" id="unlock-line">消耗 ☀️ 永久解锁</div>
+      <button type="button" class="unlock-go" id="unlock-confirm">确定</button>
+      <div class="unlock-msg" id="unlock-msg"></div>
+      <div class="watermark">我出版</div>
+    </section>
+
+    <section id="screen-loading" class="screen">
+      <svg class="diamond" viewBox="0 0 120 200" aria-hidden="true">
+        <polygon points="60,8 108,78 60,100 12,78" fill="none" stroke="#f4fbff" stroke-width="2"/>
+        <polygon points="60,100 108,78 60,192 12,78" fill="none" stroke="#f4fbff" stroke-width="2"/>
+        <line x1="12" y1="78" x2="108" y2="78" stroke="#dff" stroke-width="1.5"/>
+        <line x1="60" y1="8" x2="60" y2="192" stroke="#9fd" stroke-width="1" opacity="0.7"/>
+      </svg>
+      <div class="loading-word">LOADING ...</div>
+    </section>
+
+    <section id="screen-evolve" class="screen starfield">
+      <div class="sky" id="evo-sky">
+        <div class="body-status" id="evo-status" aria-live="polite"></div>
+        <div class="toast" id="evo-toast" hidden>背景已扩大十倍</div>
+        <div class="star-anchor" id="evo-anchor">
+          <img id="star-a" alt="" />
+          <img id="star-b" alt="" />
+        </div>
+        <div class="marker" id="evo-marker">
+          <svg class="flame tiny" viewBox="0 0 200 150" aria-hidden="true">
+            <path fill="#ffb000" d="M28 108c8-36 22-28 30-58 6 22 8 8 16-16 8 26 18 16 24 36 16-30 34-8 40 14 12 4 22 2 28-14 6 22 2 40-16 52-22 16-48 20-78 16-26 2-40-8-44-30z"/>
+          </svg>
+        </div>
+        <div class="flash" id="evo-flash"></div>
+      </div>
+      <div class="cells" id="evo-cells"></div>
+    </section>
+
+    <section id="screen-remnant" class="screen starfield">
+      <div class="sky" id="rem-sky">
+        <div class="body-status" id="rem-status" aria-live="polite"></div>
+        <div class="star-anchor" id="rem-anchor">
+          <img id="rem-a" alt="" />
+          <img id="rem-b" alt="" />
+        </div>
+        <div class="nebula" id="nebula" hidden></div>
+        <div class="marker" id="rem-marker">
+          <svg class="flame tiny" viewBox="0 0 200 150" aria-hidden="true">
+            <path fill="#ffb000" d="M28 108c8-36 22-28 30-58 6 22 8 8 16-16 8 26 18 16 24 36 16-30 34-8 40 14 12 4 22 2 28-14 6 22 2 40-16 52-22 16-48 20-78 16-26 2-40-8-44-30z"/>
+          </svg>
+        </div>
+        <div class="flash" id="rem-flash"></div>
+      </div>
+      <div class="cells" id="rem-cells"></div>
+    </section>
+  </div>
+
+  <div id="ad" hidden>
+    <div class="ad-card">
+      <h3>恒星观测赞助</h3>
+      <p>免费次数已用完。广告约 3 秒，可随时跳过。</p>
+      <p id="ad-count">3</p>
+      <button type="button" id="ad-skip">跳过</button>
+    </div>
+  </div>
+
+  <script src="js/data.js?v=4"></script>
+  <script src="js/main.js?v=4"></script>
+</body>
+</html>
