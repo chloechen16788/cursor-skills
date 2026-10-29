@@ -340,6 +340,7 @@ function preparePlay(id) {
       disrupt = true;
     }
   }
+  annotateStages(stages);
   return {
     id,
     stages,
@@ -425,6 +426,7 @@ function paintLife(t) {
       paintLife._toast = setTimeout(() => { toast.hidden = true; }, FAST ? 700 : 2200);
     }
     play.stageIndex = slot.index;
+    document.getElementById("evo-status").textContent = formatStatus(stage);
     const px = Math.max(stage.diam < 1000 ? 8 : 2, (stage.diam / play.viewKm) * skyBox("evo-sky"));
     const cap = skyBox("evo-sky") * 0.92;
     applySprite("star", stage, Math.min(px, cap));
@@ -447,6 +449,7 @@ function startRemnant() {
   const my = ++token;
   const remnant = play.remnant;
   const disrupt = play.disrupt;
+  document.getElementById("rem-status").textContent = formatStatus(play.stages[play.stages.length - 1]);
   show("remnant");
   const anchor = document.getElementById("rem-anchor");
   anchor.classList.remove("jets", "ringed");
