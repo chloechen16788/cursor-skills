@@ -475,6 +475,97 @@ function fmtDiam(km) {
   return Math.round(km) + "km";
 }
 
+const SUP_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+function toSup(n) {
+  const neg = n < 0;
+  const body = String(Math.abs(n)).replace(/\d/g, (d) => SUP_DIGITS[d]);
+  return (neg ? "⁻" : "") + body;
+}
+
+function fmtSci(n) {
+  if (!isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs === 0) return "0";
+  if (abs >= 10000 || abs < 0.01) {
+    const exp = Math.floor(Math.log10(abs));
+    const mant = n / Math.pow(10, exp);
+    return (Math.round(mant * 100) / 100).toFixed(2) + "×10" + toSup(exp);
+  }
+  if (abs >= 100) return String(Math.round(n));
+  return String(Math.round(n * 100) / 100);
+}
+
+function fmtVolumeKm(diamKm) {
+  const r = diamKm / 2;
+  const v = (4 / 3) * Math.PI * r * r * r;
+  return fmtSci(v) + " km³";
+}
+
+function formatRho(grams, diamKm) {
+  const rCm = (diamKm / 2) * 1e5;
+  const vol = (4 / 3) * Math.PI * rCm * rCm * rCm;
+  const rho = grams / vol;
+  if (rho >= 1e6) return fmtSci(rho / 1e6) + " t/cm³";
+  return fmtSci(rho) + " g/cm³";
+}
+
+function packMass(label, numText, unit) {
+  const nums = String(numText).match(/[0-9.]+/g).map(Number);
+  const mid = nums.length > 1 ? (nums[0] + nums[1]) / 2 : nums[0];
+  const sun = unit === "MJup" ? 1.898e30 : 1.9885e33;
+  return { label, grams: mid * sun, lower: /[>≥<]/.test(numText) };
+}
+
+function pullMass(note) {
+  let m = note.match(/质量(约|大约)?\s*([<>≥]?\s*[0-9.]+(?:\s*[–\-—~]\s*[0-9.]+)?)\s*(MJup|M☉|M⊙)/);
+  if (m) {
+    const unit = m[3] === "M⊙" ? "M☉" : m[3];
+    const nums = m[2].replace(/\s/g, "");
+    return packMass((m[1] ? "约 " : "") + nums + " " + unit, m[2], unit);
+  }
+  m = note.match(/残留(?:质量)?\s*([0-9.]+(?:\s*[–\-—~]\s*[0-9.]+)?)\s*(M☉|M⊙)/);
+  if (m) return packMass(m[1].replace(/\s/g, "") + " M☉", m[1], "M☉");
+  m = note.match(/黑洞\s*([>≥]\s*[0-9.]+)\s*(M☉|M⊙)/);
+  if (m) return packMass(m[1].replace(/\s/g, "") + " M☉", m[1], "M☉");
+  if (!/质量|残留|黑洞|铁核|前身/.test(note)) {
+    m = note.match(/([>≥]\s*[0-9.]+)\s*(M☉|M⊙)/);
+    if (m) return packMass(m[1].replace(/\s/g, "") + " M☉", m[1], "M☉");
+    m = note.match(/([0-9.]+(?:\s*[–\-—~]\s*[0-9.]+)?)\s*(M☉|M⊙)/);
+    if (m) return packMass(m[1].replace(/\s/g, "") + " M☉", m[1], "M☉");
+  }
+  return null;
+}
+
+function pullDensity(note) {
+  const m = note.match(/密度(约|大约)?\s*([^，。]+)/);
+  if (!m) return "";
+  return (m[1] ? "约 " : "") + m[2].trim();
+}
+
+function annotateStages(stages) {
+  let carry = null;
+  stages.forEach((stage) => {
+    const info = pullMass(stage.note || "");
+    const mass = info ? info.label : (carry ? carry.label : "—");
+    const grams = info ? info.grams : (carry ? carry.grams : null);
+    let density = pullDensity(stage.note || "");
+    if (!density && grams && stage.diam > 0) {
+      density = (info && info.lower ? "约（以下限估计）" : "约 ") + formatRho(grams, stage.diam);
+    }
+    if (!density) density = "—";
+    const volume = fmtVolumeKm(stage.diam) + (stage.diamText ? "（直径 " + stage.diamText + "）" : "");
+    stage.statusMass = mass;
+    stage.statusDensity = density;
+    stage.statusVolume = volume;
+    if (mass !== "—") carry = { label: mass, grams };
+  });
+}
+
+function formatStatus(stage) {
+  return "天体目前状态：\n质量：" + stage.statusMass + "；\n密度：" + stage.statusDensity + "；\n体积：" + stage.statusVolume + "；";
+}
+
 function stageLines(spec) {
   const lines = spec.stages.map((s, i) => `${i + 1}. ${s.name}（${s.dur}，直径 ${s.diamText}）${s.note ? "：" + s.note : ""}`);
   if (spec.branches) {

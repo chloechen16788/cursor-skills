@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>恒星光谱生命推演</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23ffb000'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="css/game.css" />
+  <link rel="stylesheet" href="css/game.css?v=4" />
 </head>
 <body>
   <div id="app">
@@ -158,6 +158,7 @@
 
     <section id="screen-evolve" class="screen starfield">
       <div class="sky" id="evo-sky">
+        <div class="body-status" id="evo-status" aria-live="polite"></div>
         <div class="toast" id="evo-toast" hidden>背景已扩大十倍</div>
         <div class="star-anchor" id="evo-anchor">
           <img id="star-a" alt="" />
@@ -175,6 +176,7 @@
 
     <section id="screen-remnant" class="screen starfield">
       <div class="sky" id="rem-sky">
+        <div class="body-status" id="rem-status" aria-live="polite"></div>
         <div class="star-anchor" id="rem-anchor">
           <img id="rem-a" alt="" />
           <img id="rem-b" alt="" />
@@ -200,7 +202,7 @@
     </div>
   </div>
 
-  <script src="js/data.js"></script>
-  <script src="js/main.js"></script>
+  <script src="js/data.js?v=4"></script>
+  <script src="js/main.js?v=4"></script>
 </body>
 </html>
