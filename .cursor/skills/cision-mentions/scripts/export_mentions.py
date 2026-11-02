@@ -25,12 +25,12 @@ def run_export(
     if stream_id == feishu_push.BITABLE_SYNC_STREAM_ID:
         if sync is None and not feishu_push.credentials_present():
             raise RuntimeError(feishu_push.missing_credentials_message())
-        return _export_1017610(
+        return _export_1023128(
             output_dir=output_dir,
             fetch_page=fetch_page,
             page_size=page_size,
             now=now,
-            sync=sync or feishu_push.sync_1017610_baseline,
+            sync=sync or feishu_push.sync_1023128_baseline,
         )
     if push_feishu and not feishu_push.credentials_present():
         raise RuntimeError(feishu_push.missing_credentials_message())
@@ -48,7 +48,7 @@ def run_export(
     )
 
 
-def _export_1017610(*, output_dir: Path, fetch_page, page_size: int, now, sync) -> dict:
+def _export_1023128(*, output_dir: Path, fetch_page, page_size: int, now, sync) -> dict:
     page_size = cision_lib.validate_page_size(page_size)
     root = cision_lib.ensure_output_dir(Path(output_dir))
     after, before = cision_lib.shanghai_window(now)

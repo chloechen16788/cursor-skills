@@ -19,7 +19,7 @@ MAX_FILE_BYTES = 30 * 1024 * 1024
 FEISHU_CHAT_ID = "oc_27040b0dc3a733ab164199154c489fad"
 FEISHU_RECEIVE_ID_TYPE = "chat_id"
 # 只有这个 stream 把全量写入下面这张表，并用表里的 id 做去重基线。标识都写死，不能改指向。
-BITABLE_SYNC_STREAM_ID = "1017610"
+BITABLE_SYNC_STREAM_ID = "1023128"
 WIKI_URL = "https://prnewswire.feishu.cn/wiki/ODp7wESdDiXrHjk7tEPcsQrSn6d"
 WIKI_NODE_TOKEN = "ODp7wESdDiXrHjk7tEPcsQrSn6d"
 # 已用 wiki get_node 核对：该节点 obj_type=bitable，obj_token 就是这个值。改表名必须 PATCH；PUT 会得到纯文本 404 page not found。
@@ -448,7 +448,7 @@ def _field_rows(header: list[str], rows: list[list[str]]) -> list[dict]:
     return payloads
 
 
-def sync_1017610_baseline(
+def sync_1023128_baseline(
     header: list[str],
     rows: list[list[str]],
     delta_path: Path,
