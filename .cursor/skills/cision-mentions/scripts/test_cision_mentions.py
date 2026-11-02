@@ -92,7 +92,7 @@ class CisionMentionsTest(unittest.TestCase):
 
             now = datetime(2026, 10, 26, 18, 0, tzinfo=SHANGHAI)
             first = cision_lib.export_mentions(
-                stream_id="1017610",
+                stream_id="42",
                 output_dir=root,
                 fetch_page=fetch,
                 now=now,
@@ -111,7 +111,7 @@ class CisionMentionsTest(unittest.TestCase):
                 return "id,title\n"
 
             second = cision_lib.export_mentions(
-                stream_id="1017610",
+                stream_id="42",
                 output_dir=root,
                 fetch_page=fetch_again,
                 now=now,
@@ -185,7 +185,7 @@ class CisionMentionsTest(unittest.TestCase):
         self.assertNotIn("FEISHU_CHAT_ID", export_source)
         self.assertNotIn("os.environ.get(\"FEISHU_CHAT", push_source)
         self.assertEqual(push_source.count("oc_27040b0dc3a733ab164199154c489fad"), 1)
-        self.assertEqual(feishu_push.BITABLE_SYNC_STREAM_ID, "1017610")
+        self.assertEqual(feishu_push.BITABLE_SYNC_STREAM_ID, "1023128")
         self.assertEqual(feishu_push.WIKI_NODE_TOKEN, "ODp7wESdDiXrHjk7tEPcsQrSn6d")
         self.assertEqual(feishu_push.BITABLE_APP_TOKEN, "ByFgbm0xRaCBD2s8ohtcg0kgnWc")
         self.assertEqual(feishu_push.BITABLE_TABLE_ID, "tblpvXJxxasNjP5e")
@@ -266,7 +266,7 @@ class CisionMentionsTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="cision-mentions-") as temporary:
             delta_path = Path(temporary) / "delta.csv"
-            summary = feishu_push.sync_1017610_baseline(
+            summary = feishu_push.sync_1023128_baseline(
                 ["id", "title"],
                 [["10", "old"], ["12", "new"]],
                 delta_path,
@@ -310,7 +310,7 @@ class CisionMentionsTest(unittest.TestCase):
             raise AssertionError("不应推送")
 
         with self.assertRaises(RuntimeError):
-            feishu_push.sync_1017610_baseline(["id"], [["1"]], Path("/tmp/ignored-delta.csv"), {}, client=Fake(), push=push)
+            feishu_push.sync_1023128_baseline(["id"], [["1"]], Path("/tmp/ignored-delta.csv"), {}, client=Fake(), push=push)
 
     def test_missing_id_field_means_full_delta(self) -> None:
         import feishu_push
@@ -342,7 +342,7 @@ class CisionMentionsTest(unittest.TestCase):
             self.assertEqual(summary["delta_rows"], 1)
 
         with tempfile.TemporaryDirectory(prefix="cision-mentions-") as temporary:
-            summary = feishu_push.sync_1017610_baseline(
+            summary = feishu_push.sync_1023128_baseline(
                 ["id"],
                 [["99"]],
                 Path(temporary) / "delta.csv",
@@ -355,7 +355,7 @@ class CisionMentionsTest(unittest.TestCase):
         self.assertEqual(summary["previous_ids"], 0)
         self.assertFalse(summary["previous_exists"])
 
-    def test_1017610_does_not_write_latest_csv(self) -> None:
+    def test_1023128_does_not_write_latest_csv(self) -> None:
         import export_mentions
 
         def fetch(page_no: int, page_size: int, after: str, before: str) -> str:
@@ -379,7 +379,7 @@ class CisionMentionsTest(unittest.TestCase):
             root = Path(temporary) / "out"
             now = datetime(2026, 10, 26, 18, 30, tzinfo=SHANGHAI)
             summary = export_mentions.run_export(
-                stream_id="1017610",
+                stream_id="1023128",
                 output_dir=root,
                 fetch_page=fetch,
                 page_size=10,
@@ -387,10 +387,10 @@ class CisionMentionsTest(unittest.TestCase):
                 now=now,
                 sync=sync,
             )
-            self.assertFalse((root / "state" / "1017610" / "latest.csv").exists())
+            self.assertFalse((root / "state" / "1023128" / "latest.csv").exists())
             self.assertEqual(summary["full_rows"], 1)
             self.assertEqual(summary["bitable_written"], 1)
-            self.assertTrue((root / "runs" / "1017610").exists())
+            self.assertTrue((root / "runs" / "1023128").exists())
 
     def test_other_stream_still_uses_latest_csv(self) -> None:
         import export_mentions
@@ -442,7 +442,7 @@ def feishu_summary() -> str:
 
     return feishu_push.summary_text(
         {
-            "stream_id": "1017610",
+            "stream_id": "1023128",
             "after": "2026-10-24T23:00:00.000Z",
             "before": "2026-10-25T23:00:00.000Z",
             "full_rows": 2,
