@@ -77,3 +77,5 @@
 
 > 特别注意 Meta 匹配正则 `(?<![a-z0-9])meta(?![a-z0-9A-Z\-])`，避免误命中 Meta-Optics / metaEye。
 > 吴泳铭标准英文名取 `Eddie Wu`，`Yongen Wu` 仅作变体别名。
+
+本文件只约束筛选和标题口径。处理停在 `final.json` 与按标题填好的 `zh.json`，交给 cision-mentions 的 `publish_daily_report.py`。

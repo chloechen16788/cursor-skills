@@ -11,7 +11,7 @@
 | 5 | PR 漏剔（独立字样） | Yahoo "paid press release" 未命中 | 补 `press ?release` 独立字样（扫描 标题/作者/摘要） |
 | 6 | 人名双键冲突 | 吴泳铭 `Eddie Wu` / `Yongen Wu` 并存 | 标准英文名取 `Eddie Wu`，`Yongen Wu` 仅作别名变体 |
 | 7 | 限额失效 | Anthropic 本应封顶 5 条却到 12 条 | **「按标题定唯一归属」必须在 curation 限额之前完成**（见 filter3 已并入 curation 早期） |
-| 8 | 中文错位 | final 由 66 变 61 后 ZH 列表未对齐 | `build_doc.py` 改为从 `zh.json` 按 `idx` 对齐读取，并断言 `len(ZH)==len(final)` |
+| 8 | 中文错位 | final 由 66 变 61 后中文列表未对齐 | 只按 final 的 `idx` 填 `zh.json`（用 `make_zh_template.py`），并断言 `len(zh)==len(final)` |
 | 9 | 翻译接口被拦截 | deep-translator 调用失败 | 改为模型逐条人工校对翻译，写入 `zh.json` |
 | 10 | 媒体口径反转 | Benzinga / The Register 一度被剔除，后须在 KB 内 | 仅收录 KB 媒体后，二者因在 KB 内而被纳入（覆盖早期「非头部媒体」剔除） |
 
@@ -21,4 +21,4 @@
 - **国内/自动驾驶为全面收录**：匹配允许正文命中，可能命中量大，属正常。
 - **媒体中文名口径**：CNBC 等在 KB 为全称「美国消费者新闻与商业频道」，报告按 KB 显示；如需简称需改 KB 或 `MEDIA_CN` 逻辑。
 - **数据覆盖偏差**：若某期国内/自动驾驶几乎无覆盖，多为数据本身特征，而非筛选问题，不必强行补录。
-- **自动化沉淀**：定时运行走 filter3→curation→prep_final→人工翻译→`publish_daily_report.py`（清空并重写飞书文档，再发日期和链接）。翻译步骤仍需人工/模型校对。不要把 Word 当作成品。
+- **处理停在翻译**：顺序是 filter3 → curation → prep_final → make_zh_template → 按标题填 `zh.json`。产出 `final.json` 和 `zh.json` 后交给 cision-mentions 的 `publish_daily_report.py`。翻译仍需人工或模型校对。

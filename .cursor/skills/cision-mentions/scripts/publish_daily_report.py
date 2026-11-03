@@ -22,7 +22,7 @@ import feishu_push
 REPORT_WIKI_TOKEN = "PP88weeBdi1Pcgkmpxbc48lSn5e"
 REPORT_WIKI_URL = "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e"
 DEFAULT_KB = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent.parent.parent
     / "baidu-competitor-daily"
     / "assets"
     / "翻译知识库.xlsx"

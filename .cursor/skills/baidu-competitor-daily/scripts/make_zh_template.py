@@ -3,7 +3,7 @@
 
 读取 final.json，生成 zh_template.json —— 一个按 idx 排列的清单：
   [ {"idx":0, "media_kb":"...", "section":"...", "entity":"...", "en":"英文标题", "zh":""}, ... ]
-人工把每条的 "zh" 填上中文标题，保存为 zh.json 交给 build_doc.py 使用。
+人工只按标题把每条的 "zh" 填上中文，保存为 zh.json，连同 final.json 交给 cision-mentions 的 publish_daily_report.py。
 """
 import argparse, json
 
