@@ -3,7 +3,7 @@ name: ant-test
 description: >
   蚂蚁测试。只处理 Cision stream 1024448（Chloe test-the verge Stevie Bonifield）的单个记者取数和正文分析。
   触发说法包括「蚂蚁测试」「1024448」「Stevie Bonifield」「单个记者」「数据中心正文」。
-  先按上海时间近一年只拉第 1 页；行数低于 4999 才导出。再从标题圈出数据中心稿，用 Firecrawl 抓正文，按正文写选材、写作手法、立场和内容。
+  先按上海时间近一年只拉第 1 页；行数低于 4999 才导出。分析先写一句定位和数据概要（产出、标题选材），再从标题圈出数据中心稿，用 Firecrawl 抓正文，按正文写选材、写作手法、立场和内容。
   定时流水线、stream 1023128、飞书日报都不使用本技能。
 ---
 
@@ -125,14 +125,134 @@ firecrawl scrape --only-main-content \
 
 ## 分析
 
-只根据裁剪后的正文写下面四项。情感分、广告价值和标题词频可以当对照，不能代替正文判断。
+分两段写。前一段只用已导出的 CSV。后一段才用裁剪后的正文。情感分和广告价值可以当对照，不能代替这两段。
+
+### 简要说明
+
+用一两句说明这个记者写什么、全年有多少篇、署名和语言和国家是否单一，以及数据中心占全年多少。数据中心占比低时，写成消费科技快讯记者，不是数据中心专线。占比用下面的标题命中重算。
+
+### 数据概要
+
+先写窗口：上海时间的起点（含）和终点（不含）。行数小于 4999 就写这一年是齐的。`keywords` 全部是 `{}` 时写明题材只看标题。
+
+然后写产出和选材。数字每次从当次 CSV 重算。在仓库根目录执行，把 `CSV` 换成当次导出路径：
+
+```bash
+python3 - << 'PY'
+import csv, re, statistics
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+CSV = Path("CSV")
+SH = timezone(timedelta(hours=8))
+# 与取数相同的上海窗口：去年今天 00:00（含）到明天 00:00（不含）
+today = datetime.now(SH).date()
+try:
+    start_day = today.replace(year=today.year - 1)
+except ValueError:
+    start_day = today.replace(year=today.year - 1, day=28)
+window_start = datetime(start_day.year, start_day.month, start_day.day, tzinfo=SH)
+window_end = datetime(today.year, today.month, today.day, tzinfo=SH) + timedelta(days=1)
+
+rows = list(csv.DictReader(CSV.open(encoding="utf-8-sig", newline="")))
+titles = [re.sub(r"\s+", " ", row["title"]).strip() for row in rows]
+n = len(titles)
+
+def sh(value):
+    return datetime.strptime(value, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=timezone.utc).astimezone(SH)
+
+def month_add(year, month, step):
+    index = year * 12 + (month - 1) + step
+    return index // 12, index % 12 + 1
+
+moments = [sh(row["publishedAt"]) for row in rows]
+counts = Counter(item.strftime("%Y-%m") for item in moments)
+year, month = window_start.year, window_start.month
+complete = []
+while True:
+    start = datetime(year, month, 1, tzinfo=SH)
+    ny, nm = month_add(year, month, 1)
+    end = datetime(ny, nm, 1, tzinfo=SH)
+    if start >= window_end:
+        break
+    key = f"{year:04d}-{month:02d}"
+    covered = start >= window_start and end <= window_end
+    print(f"month={key} rows={counts[key]} complete={'yes' if covered else 'no'}")
+    if covered:
+        complete.append(counts[key])
+    year, month = ny, nm
+
+print(f"rows={n}")
+print(f"unique_titles={len(set(titles))}")
+print(f"window_start={window_start.strftime('%Y-%m-%d %H:%M')}")
+print(f"window_end={window_end.strftime('%Y-%m-%d %H:%M')}")
+print(f"published_first={min(moments).strftime('%Y-%m-%d %H:%M')}")
+print(f"published_last={max(moments).strftime('%Y-%m-%d %H:%M')}")
+if complete:
+    mean = statistics.fmean(complete)
+    print(f"complete_min={min(complete)} complete_max={max(complete)} complete_mean={int(mean + 0.5)}")
+for column in ("author", "source", "languageCode", "locationCountry"):
+    mode, count = Counter(row[column] for row in rows).most_common(1)[0]
+    print(f"{column}={mode} share={count / n * 100:.1f}%")
+print(f"keywords_empty={sum(1 for row in rows if row['keywords'].strip() == '{}')}/{n}")
+
+stop = set("""
+a an the of and or to in for on with from by at as is are was were be been
+it its this that these those after over into about than then so not no but
+if via per new says said will would can could may might their his her our
+your they we you who what when where how which more most other out up down
+off also just have has amid before during while
+""".split())
+freq = Counter()
+for title in titles:
+    for word in re.findall(r"[A-Za-z][A-Za-z0-9'’-]{2,}", title):
+        token = word.lower()
+        if token not in stop:
+            freq[token] += 1
+print("WORD_FREQ")
+for word, count in freq.most_common(15):
+    print(f"{count} {word}")
+
+themes = [
+    ("gemini", r"gemini"),
+    ("android", r"android"),
+    ("chatgpt_openai", r"chatgpt|openai"),
+    ("claude", r"\bclaude\b"),
+    ("linux", r"linux"),
+    ("ai", r"\bai\b|artificial intelligence|openai|chatgpt|anthropic|gemini|llm"),
+    ("data_center", r"data cent|data-cent"),
+    ("ram_memory", r"\bram\b|\bmemory\b"),
+    ("privacy_security", r"privacy|hack|breach|cyber|security|surveillance"),
+]
+print("TITLE_HITS")
+for name, pattern in themes:
+    count = sum(1 for title in titles if re.search(pattern, title, re.I))
+    print(f"{name}={count} share={count / n * 100:.1f}%")
+PY
+```
+
+标准输出只有计数。不要打印标题。
+
+**产出。** 用脚本里的篇数、标题是否互不重复、作者列和来源列。完整月是窗口盖住整月的月份：该月 1 日 00:00 不早于窗口起点，下月 1 日 00:00 不晚于窗口终点。写出这些月的最少、最多，以及 `complete_mean`（中枢）。并列最高的月份点名。首月最早一篇晚于窗口起点时，写明从哪一天才开始，并给该月篇数。末月写出最后一篇的上海日期和钟点，并给该月篇数。
+
+**选材。** 这里只看标题，分两种数。
+
+- 词频是出现次数。切词用 `[A-Za-z][A-Za-z0-9'’-]{2,}`，转小写，去掉上面的停用词。同一标题里同一个词出现两次算两次。撇号留在词里，`Google's` 不计入 `google`。回复里点名机构名，跳过 now、app、reportedly、getting、next、year、data、users、first 这类词。
+- 标题命中是一篇一次，题材之间可以重叠。给出篇数和占全年的百分比，保留一位小数。Gemini、Android、ChatGPT/OpenAI、Claude、Linux 用对应规则。AI 用 `ai` 那条。数据中心用 `data_center`。RAM/内存用 `ram_memory`，单独的 DRAM 不算，内存只是中文说法。隐私安全用 `privacy_security`。
+
+用 2026-11-03 那次导出校验脚本时，词频是 Google 78、Apple 47、Amazon 25；标题命中是 Gemini 24、Android 22、ChatGPT/OpenAI 30、Claude 19、Linux 32、AI 181（21.1%）、数据中心 15（1.7%）、RAM/内存 22（2.6%）、隐私安全 31（3.6%）。完整月最少 43、最多 107、中枢 74。窗口变了就重算，不要把这组数写进新的回复。
+
+### 内容分析
+
+只根据裁剪后的数据中心正文。先说圈出几篇、抓到几篇、截断几篇，再写下面四项。
 
 - **选材。** 这批评论实际写了哪些数据中心题目，材料来自公司公告、财报、民调还是其他媒体。给出篇数。
 - **写作手法。** 篇幅、开头怎么下判断、引语从哪来、有没有转写和专题串联。
 - **立场。** 作者把扩建、社区代价、公司效率声明和消费端价格放在什么关系里。不要把 Cision 的 ±0.1 情感桶当成立场。
 - **内容。** 这些稿在一年里连成的情节。点明截断篇。
 
-回复用简短中文。先说圈出几篇、抓到几篇、截断几篇，再写四项。不要粘贴大段正文，不要打印密钥。
+回复用简短中文。不要粘贴大段正文，不要打印密钥。
 
 ## 禁止
 
