@@ -43,7 +43,7 @@ DOMESTIC_LEADERS = {
     '梁文锋/Liang Wenfeng': ['liang wenfeng', '梁文锋'],
 }
 AUTO_BRANDS = {
-    'Waymo': ['waymo'], 'Cruise': ['cruise'], 'Zoox': ['zoox'], 'Wayve': ['wayve'], 'Uber': ['uber'],
+    'Waymo': ['waymo'], 'Cruise': [r"~(?<!tom )cruise(?![a-z0-9])(?!\s+(?:ship|ships|missile|missiles|control|line|lines|liner|cruiser|ship's))"], 'Zoox': ['zoox'], 'Wayve': ['wayve'], 'Uber': ['uber'],
     'WeRide/文远知行': ['weride', '文远知行'], 'PonyAI/小马智行': ['pony.ai', 'pony ai', 'ponyai', '小马智行'],
     'Caocao/曹操出行': ['caocao', '曹操出行'], 'XPeng/小鹏': ['xpeng', '小鹏'], 'Ruqi/如祺出行': ['ruqi', '如祺'],
     'Didi/滴滴': ['didi', '滴滴'], 'Lyft': ['lyft'], 'Cybercab': ['~cybercab'],
@@ -58,7 +58,7 @@ AUTO_LEADERS = {
 OVERSEAS_BRANDS = {
     'Alphabet/Google': ['alphabet', 'google', 'gemini', 'deepmind', 'google deepmind'], 'Microsoft': ['microsoft'],
     'Meta': ['~(?<![a-z0-9])meta(?![a-z0-9A-Z\\-])'], 'Apple': ['apple'], 'Amazon': ['amazon'], 'Nvidia': ['nvidia'], 'IBM': ['ibm'], 'Intel': ['intel'],
-    'OpenAI': ['openai'], 'Anthropic': ['anthropic'], 'Mistral': ['mistral'], 'Perplexity': ['perplexity'],
+    'Tesla': ['tesla'], 'OpenAI': ['openai'], 'Anthropic': ['anthropic'], 'Mistral': ['mistral'], 'Perplexity': ['perplexity'],
     'ChatGPT/GPT/Claude': ['chatgpt', 'chat gpt', ' gpt ', 'claude'],
 }
 OVERSEAS_LEADERS = {
@@ -182,12 +182,74 @@ EXCL_ECOMM = re.compile(r'(e-?commerce|warehouse|fulfillment|logistics|shipping|
 PR_PAT = re.compile(r'(press ?release|prnewswire|pr newswire|globe ?newswire|einpresswire|ein ?presswire|business ?wire|news ?direct|marketwire|accesswire|prweb|issuewire|send2press|newsfile|cision|/pr ?newswire/)', re.I)
 
 
+# ================= 2026-11-03 精细化口径（9 条） =================
+# 1) Yahoo Finance 纯股价分析降噪：仅 source 含 yahoo 且为纯股价波动、无实质话题时剔除
+YAHOO_STOCK_PAT = re.compile(r'(shares (?:rise|fall|jump|slip|drop|climb|tumble|soar|plunge|gain|lose|rally|slide|surge|sink|slump|edge|tick)|stock (?:rises|falls|jumps|slips|drops|climbs|tumbles|pops|slides|sinks|slumps|rallies|edges)|price target|upgraded|downgraded|buy rating|sell rating|analyst rating|stock price|market cap|catalyst|options trade|calls and puts|why .* stock)', re.I)
+SUBSTANTIVE_PAT = re.compile(r'(\bai\b|artificial intelligence|\bagent\b|robotaxi|cybercab|robot|\bchip|semiconductor|cloud|\baws\b|autonomous|self-driving|fsd|model|earnings|revenue|profit|regulation|antitrust|lawsuit|probe|investigat|\bipo\b|funding|valuation|launch|partnership|deal|tariff|\bchina\b|political|election|trump|biden|senate|congress|white house)', re.I)
+
+# 3) 马斯克 / 特斯拉话题门控
+MUSK_TOPIC_DROP = re.compile(r'(starlink|spacex|\btwitter\b|on x\b|x platform|x corp|x social|grok(?!\s*ai))', re.I)
+MUSK_TOPIC_KEEP = re.compile(r'(\bai\b|artificial intelligence|\bagent\b|robotaxi|cybercab|robot|\bchip|semiconductor|autonomous|self-driving|fsd|political|tariff|election|trump|biden|white house|senate|congress|regulation)', re.I)
+TESLA_EV_REFRESH = re.compile(r'(tesla.{0,50}(new model|model refresh|redesign|facelift|next-?gen|all-new|updated model|updated version|refresh(?:ed)? model|generation|redesigned))', re.I)
+TESLA_KEEP = re.compile(r'(fsd|robotaxi|cybercab|robot|\bchip|semiconductor|autonomous|self-driving|artificial intelligence|\bagent\b|\bai\b)', re.I)
+
+# 4) Uber / Lyft 外卖业务剔除（保留自动驾驶/Robotaxi）
+UBER_LYFT_DROP = re.compile(r'(uber\s+eats|ubereats|lyft\s+(?:delivery|pink|silver)|food delivery|meal delivery|delivery service|doordash|grubhub)', re.I)
+UBER_LYFT_KEEP = re.compile(r'(robotaxi|autonomous|self-driving|driverless|waymo|zoox|cruise|\bav\b|self drive)', re.I)
+
+# 5) 亚马逊电商/物流/外卖/消费硬件剔除（保留芯片/云/AI/Agent/自动驾驶）
+AMAZON_DROP = re.compile(r'(amazon fresh|amazon grocery|whole foods|food delivery|e-?commerce|warehouse|fulfillment|logistics|shipping|retail sales|online retail|grocery|marketplace|third-party seller|best seller|all-time low|price drop|low price|on amazon|amazon\.com|echo show|echo dot|echo studio|\becho\b|\bkindle\b|\balexa\b|fire tv|doorbell|blink|astro|halo|smart display|smart alarm clock|smart speaker)', re.I)
+AMAZON_KEEP = re.compile(r'(\bai\b|artificial intelligence|robot|autonomous|cloud|\baws\b|\bchip|semiconductor|model|agent|alexa ai|zoox|acquisition|merger|antitrust|regulator|\bfcc\b|lawsuit)', re.I)
+
+# 6) 财报前瞻（仅剔前瞻，保留实际业绩）；配 ACTUAL_EARNINGS_PAT 防止误删实际业绩
+EARNINGS_PREVIEW_PAT = re.compile(r'(earnings preview|results preview|quarterly preview|earnings watch|preview of (?:the |its |their |upcoming )?(?:earnings|quarterly|results)|ahead of (?:the |its |their |upcoming |this |next )?(?:earnings|results|report)|what to expect (?:from|as|when|before|around)|to report (?:its|their|first|second|third|fourth|q[1-4]|earnings)|before (?:the |its |their )?(?:earnings|results) report|is set to report|expected to report|will report|reports (?:its |their )?earnings (?:tomorrow|next|on |this |monday|tuesday|wednesday|thursday|friday|week)|everything you need to know (?:ahead|before)|earnings season preview|set to (?:release|announce) (?:its |their )?earnings|(?:earnings|results) on deck|on deck (?:thursday|wednesday|tuesday|monday|friday|as|for))', re.I)
+ACTUAL_EARNINGS_PAT = re.compile(r'(reported|beats?|misses?|posted|quarterly (?:revenue|results|earnings)|q[1-4] (?:results|earnings|revenue)|full-year|fiscal (?:year|q)|earnings call|net income|operating income|raised (?:its |their )?guidance|beat estimates|missed estimates|topped|bottom line)', re.I)
+
+# 7) 加密货币相关剔除
+CRYPTO_PAT = re.compile(r'(cryptocurrency|\bcrypto\b|bitcoin|ethereum|blockchain|\bweb3\b|\bnft\b|defi|solana|dogecoin|coinbase|binance|crypto exchange|cryptocurrencies)', re.I)
+
+
 def exclusion_reason(text, source, is_overseas):
     for name, pat in EXCL:
         if pat.search(text):
             return name
     if 'amazon' in text and EXCL_ECOMM.search(text) and not re.search(r'\bai\b|artificial intelligence|robot|autonomous|cloud|\baws\b|chip|semiconductor|model| alexa ai', text, re.I):
         return '亚马逊电商/物流(非AI)'
+    return None
+
+
+def topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl, title_l, excerpt_l, kwkeys_l, content_l, source):
+    """2026-11-03 精细化口径：针对具体品牌/来源的话题门控，命中则返回剔除原因。"""
+    # 1) Yahoo Finance 纯股价分析降噪
+    if 'yahoo' in source.lower():
+        blob = title_l + ' ' + kwkeys_l + ' ' + excerpt_l
+        if YAHOO_STOCK_PAT.search(blob) and not SUBSTANTIVE_PAT.search(blob):
+            return 'Yahoo 纯股价分析(降噪)'
+    # 标题/摘要/关键词 作为强信号；正文(前段) 作为补充
+    blob = title_l + ' ' + excerpt_l + ' ' + kwkeys_l + ' ' + content_l[:1800]
+    # 2) 马斯克（领导人）话题门控：星链/SpaceX/推特等且不含重点话题 -> 剔除
+    musk = any('musk' in e.lower() for e in (auto_l + ovl))
+    if musk and MUSK_TOPIC_DROP.search(blob) and not MUSK_TOPIC_KEEP.search(blob):
+        return '马斯克非重点话题(星链/SpaceX/推特等)'
+    # 3) 特斯拉 电动车更新换代剔除（保留 FSD/Robotaxi/Cybercab/机器人/芯片/自动驾驶）
+    tesla = any('tesla' in e.lower() for e in (ovb + dom_b + auto_b))
+    if tesla and TESLA_EV_REFRESH.search(blob) and not TESLA_KEEP.search(blob):
+        return '特斯拉电动车更新换代(非重点)'
+    # 4) Uber / Lyft 外卖业务剔除（保留自动驾驶/Robotaxi）
+    uber_lyft = any(('uber' in e.lower() or 'lyft' in e.lower()) for e in auto_b)
+    if uber_lyft and UBER_LYFT_DROP.search(blob) and not UBER_LYFT_KEEP.search(blob):
+        return 'Uber/Lyft 外卖业务(非重点)'
+    # 5) 亚马逊电商/物流/外卖剔除（保留芯片/云/AI/Agent/自动驾驶）
+    amazon = any('amazon' in e.lower() for e in ovb)
+    if amazon and AMAZON_DROP.search(blob) and not AMAZON_KEEP.search(blob):
+        return '亚马逊电商/物流/外卖(非AI)'
+    # 6) 财报前瞻（仅剔前瞻，保留实际业绩）
+    blob_head = title_l + ' ' + excerpt_l + ' ' + kwkeys_l
+    if EARNINGS_PREVIEW_PAT.search(blob_head) and not ACTUAL_EARNINGS_PAT.search(blob_head):
+        return '财报前瞻(非实际业绩)'
+    # 7) 加密货币相关剔除（仅在标题/摘要/关键词强信号时）
+    if CRYPTO_PAT.search(blob_head):
+        return '加密货币相关'
     return None
 
 
@@ -270,6 +332,9 @@ def main():
 
         is_overseas = bool(ovb or ovl)
         reason = exclusion_reason(excl_text, source, is_overseas)
+        if not reason:
+            reason = topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl,
+                               title_l, excerpt_l, kwkeys_l, content.lower(), source)
         if reason:
             continue
 

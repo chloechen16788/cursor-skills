@@ -65,7 +65,9 @@ Detailed commands, environment setup, and the verification checklist are in
 
 Competitor/leader alias tables and exclusion rules live in `scripts/filter3.py`
 (`DOMESTIC_BRANDS`, `DOMESTIC_LEADERS`, `AUTO_BRANDS`, `AUTO_LEADERS`, `OVERSEAS_BRANDS`, `OVERSEAS_LEADERS`, `EXCL`, `PR_PAT`).
-The readable mirror is in `references/filtering_criteria.md` — keep the two in sync when editing.
+Brand and leader topic gating (Yahoo stock noise, Musk/Tesla, Uber/Lyft, Amazon, earnings previews, crypto) lives in `topic_gate()` in the same file.
+Priority weights live in `scripts/curation.py` (`PRIORITY`): earnings, IPO, funding, and regulation score 2; model updates score 1; an OpenAI or Anthropic IPO or funding hit adds 3 more.
+The readable mirror is in `references/filtering_criteria.md` (section 八 has the nine refined rules, including the added Tesla brand) — keep the two in sync when editing.
 A consolidated KB is bundled at `assets/翻译知识库.xlsx`; re-consolidate with `scripts/consolidate_kb.py` after edits.
 
 ## Known pitfalls
