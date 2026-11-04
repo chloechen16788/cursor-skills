@@ -14,6 +14,9 @@
 | 8 | 中文错位 | final 由 66 变 61 后 ZH 列表未对齐 | `build_doc.py` 改为从 `zh.json` 按 `idx` 对齐读取，并断言 `len(ZH)==len(final)` |
 | 9 | 翻译接口被拦截 | deep-translator 调用失败 | 改为模型逐条人工校对翻译，写入 `zh.json` |
 | 10 | 媒体口径反转 | Benzinga / The Register 一度被剔除，后须在 KB 内 | 仅收录 KB 媒体后，二者因在 KB 内而被纳入（覆盖早期「非头部媒体」剔除） |
+| 11 | Cruise 人名误命中 | `cruise` 词边界正则会命中 Tom Cruise、cruise ship / cruise missile / Princess Cruise Line | Cruise 改用 `(?<!tom )cruise(?![a-z0-9])(?!\s+(?:ship\|ships\|missile\|missiles\|control\|line\|lines\|liner\|cruiser\|ship's))`。v2 原稿的 `(?<![a-z] )` 会把 GM Cruise 一并挡掉，这里只排除 Tom Cruise，GM Cruise、Cruise's robotaxi 仍命中 |
+| 12 | 财报前瞻漏剔 | "everything you need to know ahead of earnings"、"earnings on deck"、"reports earnings tomorrow: what to expect" 未被初版前瞻正则命中 | 前瞻正则补充 `on deck`、收窄 "ahead of / to report" 必带 the\|its，并加 `ACTUAL_EARNINGS_PAT` 守护，避免误删实际业绩 |
+| 13 | 亚马逊噪音外溢 | "OLED monitor price on Amazon"、Echo/Kindle 等消费硬件、外卖/物流 仍被当作亚马逊公司新闻收录 | Amazon 分支加入 电商/物流/零售/生鲜/外卖 + 消费硬件(Echo/Kindle/Alexa/Fire TV/Ring) 剔除，并以 芯片/云/AI/Agent/自动驾驶 作保留白名单。单独的 deal 不作为保留词，否则 “Kindle deal” 会被留下 |
 
 ## 额外注意事项
 

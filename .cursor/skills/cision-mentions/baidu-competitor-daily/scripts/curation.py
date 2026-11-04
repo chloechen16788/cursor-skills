@@ -23,19 +23,21 @@ def load_raw(raw_path, sheet='delta'):
     return raw_by_url
 
 
-PRIORITY = {
-    '监管/regulation': re.compile(r'regulat|antitrust|lawsuit|sue|sued|ban |probe|investigat|\beu\b|doj|\bftc\b|\bcma\b|ofcom|senate|congress|合规|监管', re.I),
-    '芯片/chip': re.compile(r'\bchip|semiconductor|export control|export ban|\bfab\b|tsmc|\bhbm\b|ai chip|半导体|芯片', re.I),
-    '中美/China-US': re.compile(r'\bchina\b|u\.s\.|us-china|beijing|tariff|chinese|中美|中国', re.I),
-    '英国/UK': re.compile(r'\buk\b|britain|british|ofcom|\bcma\b|london', re.I),
-    '联合国/机构预警': re.compile(r'\bun\b|united nations|oecd|iea|\bwarnings?\b|\bwarn|advocat|联合国|预警', re.I),
-    '就业/employment': re.compile(r'\bjob|employ|layoff|workforce|unemployment|就业', re.I),
-    '上市/IPO': re.compile(r'\bipo\b|go public|listing|\bs-1\b|上市|募股', re.I),
-    '融资/funding': re.compile(r'funding|raise[sd]?\s+\\\$|valuation|series a|series b|series c|融资|募资', re.I),
-    '业绩/earnings': re.compile(r'earnings|revenue|profit|quarterly|results|guidance|财报|业绩|净利', re.I),
-    'Robotaxi/自动驾驶': re.compile(r'robotaxi|self-driving|autonomous|waymo|cruise|zoox|weride|pony|cybercab|无人驾驶', re.I),
-    '独家/exclusive': re.compile(r'exclusive|exclusively|独家', re.I),
-}
+# (名称, 权重, 正则) —— 权重用于排序；业绩/上市/融资为重点关注(权重2)
+PRIORITY = [
+    ('监管/regulation', 2, re.compile(r'regulat|antitrust|lawsuit|sue|sued|ban |probe|investigat|\beu\b|doj|\bftc\b|\bcma\b|ofcom|senate|congress|合规|监管', re.I)),
+    ('芯片/chip', 1, re.compile(r'\bchip|semiconductor|export control|export ban|\bfab\b|tsmc|\bhbm\b|ai chip|半导体|芯片', re.I)),
+    ('中美/China-US', 1, re.compile(r'\bchina\b|u\.s\.|us-china|beijing|tariff|chinese|中美|中国', re.I)),
+    ('英国/UK', 1, re.compile(r'\buk\b|britain|british|ofcom|\bcma\b|london', re.I)),
+    ('联合国/机构预警', 1, re.compile(r'\bun\b|united nations|oecd|iea|\bwarnings?\b|\bwarn|advocat|联合国|预警', re.I)),
+    ('就业/employment', 1, re.compile(r'\bjob|employ|layoff|workforce|unemployment|就业', re.I)),
+    ('上市/IPO', 2, re.compile(r'\bipo\b|go public|listing|\bs-1\b|上市|募股', re.I)),
+    ('融资/funding', 2, re.compile(r'funding|raise[sd]?\s+\$|valuation|series a|series b|series c|融资|募资', re.I)),
+    ('业绩/earnings', 2, re.compile(r'earnings|revenue|profit|quarterly|results|guidance|财报|业绩|净利', re.I)),
+    ('Robotaxi/自动驾驶', 1, re.compile(r'robotaxi|self-driving|autonomous|waymo|cruise|zoox|weride|pony|cybercab|无人驾驶', re.I)),
+    ('模型更新/model', 1, re.compile(r'new model|model (?:update|upgrade|release|launch)|gpt-?\d|claude (?:opus|sonnet|haiku|\d)|gemini \d|feature update|new (?:feature|capability|version)|upgraded (?:its|the) model|rolled out', re.I)),
+    ('独家/exclusive', 1, re.compile(r'exclusive|exclusively|独家', re.I)),
+]
 
 
 def priority_score(x, raw_by_url):
@@ -44,14 +46,19 @@ def priority_score(x, raw_by_url):
     t = (x['title'] + ' ' + kw + ' ' + excerpt + ' ' + content).lower()
     score = 0
     hits = []
-    for name, pat in PRIORITY.items():
+    for name, w, pat in PRIORITY:
         if pat.search(t):
-            score += 1
+            score += w
             hits.append(name)
     if x.get('ovl') or x.get('dom_l') or x.get('auto_l'):
         if re.search(r'ceo|chief|founder|president|says|said|warns|predict|view|interview|观点|表示', t):
             score += 1
             hits.append('领导人观点')
+    # 重点关注：OpenAI / Anthropic 上市融资（额外加权）
+    ovb = [e.lower() for e in x.get('ovb', [])]
+    if ('openai' in ' '.join(ovb) or 'anthropic' in ' '.join(ovb)) and ('上市/IPO' in hits or '融资/funding' in hits):
+        score += 3
+        hits.append('OpenAI/Anthropic 上市融资(重点)')
     return score, hits
 
 

@@ -72,8 +72,24 @@
 
 - 国内企业：阿里巴巴/通义千问/Qwen、字节跳动/抖音/豆包/火山引擎、腾讯/微信/混元、百度竞品侧（华为/深度求索/智谱/月之暗面/Kimi/百川/零一万物/Manus/商汤/小米/美团/京东/拼多多/Temu 等）
 - 自动驾驶：Waymo、Cruise、Zoox、Wayve、Uber、文远知行、小马智行、小鹏、滴滴、Lyft、Cybercab
-- 海外企业：Alphabet/Google、Microsoft、Meta、Apple、Amazon、Nvidia、IBM、Intel、OpenAI、Anthropic、Mistral、Perplexity、ChatGPT/GPT/Claude
+- 海外企业：Alphabet/Google、Microsoft、Meta、Apple、Amazon、Nvidia、IBM、Intel、**Tesla（新增）**、OpenAI、Anthropic、Mistral、Perplexity、ChatGPT/GPT/Claude
 - 领导人：Sundar Pichai、Satya Nadella、Sam Altman、Dario Amodei、Mark Zuckerberg、Jensen Huang、Tim Cook、Andy Jassy、Jeff Bezos、Elon Musk 等（含对应的国内/自动驾驶领导人）
 
 > 特别注意 Meta 匹配正则 `(?<![a-z0-9])meta(?![a-z0-9A-Z\-])`，避免误命中 Meta-Optics / metaEye。
 > 吴泳铭标准英文名取 `Eddie Wu`，`Yongen Wu` 仅作变体别名。
+
+## 八、2026-11-03 精细化口径（9 条，对应 filter3 的 topic_gate / curation 加权）
+
+> 以下全部已在 `scripts/filter3.py` 与 `scripts/curation.py` 中实现；改口径时两处须同步。
+
+1. **Yahoo Finance 纯股价分析降噪**：仅当来源含 `yahoo` 且标题/摘要/关键词为纯股价波动（shares/stock rise·fall、price target、upgraded/downgraded、market cap 等）且**无**实质话题（AI/芯片/云/业绩/监管/上市融资等）时才剔除。
+2. **Cruise 品牌去人名噪音**：Cruise 改用边界正则 `(?<!tom )cruise(?![a-z0-9])(?!\s+(?:ship|ships|missile|missiles|control|line|lines|liner|cruiser|ship's))`，避免误命中 Tom Cruise、cruise ship / cruise missile / Princess Cruise Line 等；GM Cruise、Cruise's robotaxi 正常命中。
+3. **马斯克 / 特斯拉 话题门控**：
+   - 马斯克（领导人）文章：若主要关于 星链 / SpaceX / 推特(X平台) / grok 且**不**含重点话题（AI/Agent/Robotaxi/Cybercab/机器人/芯片/重大政治事件）则剔除。
+   - 特斯拉（新增品牌）文章：若主要关于**电动车更新换代**（new model / refresh / redesign / facelift / next-gen）且不含 FSD/Robotaxi/Cybercab/机器人/芯片/自动驾驶 则剔除；FSD/Robotaxi/Cybercab/机器人/芯片/自动驾驶 内容正常收录。
+4. **Uber / Lyft 外卖剔除**：若文章主要关于 外卖（Uber Eats / food delivery / DoorDash 等）且不含 自动驾驶/Robotaxi/无人驾驶 则剔除；Robotaxi/无人驾驶 内容正常收录。
+5. **亚马逊 电商/物流/外卖/消费硬件剔除**：若文章主要关于 电商/物流/仓储/零售/生鲜/外卖 或 消费硬件（Echo/Kindle/Alexa/Fire TV/Ring 等）且**不**含 芯片/云(AWS)/AI/Agent/自动驾驶/机器人 则剔除；芯片、云、AI、Agent、自动驾驶（如 Zoox）内容正常收录。
+6. **财报前瞻剔除（保留实际业绩）**：标题/摘要/关键词出现「earnings preview / ahead of earnings / what to expect / to report earnings / on deck / everything you need to know ahead」等前瞻表述时剔除；但若同时出现实际业绩信号（reported / beats / misses / quarterly revenue / fiscal 等）则**不**剔除（保留实际业绩）。
+7. **加密货币剔除**：标题/摘要/关键词出现 crypto / bitcoin / ethereum / blockchain / NFT / web3 / defi / coinbase / binance 等即剔除。
+8. **业绩 / 上市融资 重点关注**：`curation.py` 中 业绩、上市(IPO)、融资 权重提升为 2；**OpenAI / Anthropic 的上市融资额外 +3 加权**，确保优先入选。
+9. **模型功能更新收录**：新增 `模型更新/model` 识别（new model / model update / GPT-/Claude-/Gemini 版本 / feature update / rolled out 等），模型功能更新类报道正常收录。
