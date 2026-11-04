@@ -36,6 +36,7 @@ PRIORITY = [
     ('业绩/earnings', 2, re.compile(r'earnings|revenue|profit|quarterly|results|guidance|财报|业绩|净利', re.I)),
     ('Robotaxi/自动驾驶', 1, re.compile(r'robotaxi|self-driving|autonomous|waymo|cruise|zoox|weride|pony|cybercab|无人驾驶', re.I)),
     ('模型更新/model', 1, re.compile(r'new model|model (?:update|upgrade|release|launch)|gpt-?\d|claude (?:opus|sonnet|haiku|\d)|gemini \d|feature update|new (?:feature|capability|version)|upgraded (?:its|the) model|rolled out', re.I)),
+    ('AI战略/产品路线', 2, re.compile(r'\bai\b.{0,40}(strategy|push|spending|investment|upgrade|feature|search|agent|roadmap|ambition)|siri ai|apple intelligence|copilot|\bgemini\b|ai product|ai assistant', re.I)),
     ('独家/exclusive', 1, re.compile(r'exclusive|exclusively|独家', re.I)),
 ]
 
@@ -66,6 +67,8 @@ def aliases_of(sec, ent):
     if sec == '企业领导人':
         name = ent.split('(')[0].strip()
         return [name.lower()] if re.search(r'[A-Za-z]', name) else []
+    if ent == 'Cruise':
+        return []  # 避免 "Tom Cruise" 等被误归并到 Cruise
     outs = []
     for p in re.split(r'[/((（）)]', ent):
         p = p.strip()
@@ -92,7 +95,60 @@ def unique_placement(x, alias_index):
     return (p[1], p[2])
 
 
-CAP = {'海外企业': 5, '企业领导人': 8, '国内企业': 50, '自动驾驶': 50}
+STOPWORDS = {'the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'was', 'were',
+             'has', 'have', 'will', 'its', 'his', 'her', 'not', 'but', 'you', 'can',
+             'how', 'why', 'what', 'who', 'out', 'new', 'more', 'says', 'said', 'into',
+             'over', 'after', 'amid', 'about', 'than', 'then', 'they', 'their'}
+
+
+def _toks(t):
+    return {w for w in re.findall(r'[a-z0-9]+', t.lower()) if len(w) >= 3 and w not in STOPWORDS}
+
+
+def _norm_title(t):
+    return re.sub(r'[^a-z0-9]+', '', t.lower())
+
+
+def dedup_items(items):
+    """三道去重：URL -> 精确同题 -> 同板块/同实体/同媒体的近似同题。
+
+    必须在限额之前执行：否则同一稿的多个分发副本（CBS 地方台 5 条、Bloomberg 改题重发）
+    会先占满品牌名额、再去重，导致名额被白白吃掉（Apple 5 个名额被 5 条同一稿占满）。
+    """
+    seen = set(); out = []
+    for x in items:
+        if x['url'] in seen:
+            continue
+        seen.add(x['url']); out.append(x)
+
+    best = {}
+    for x in out:
+        k = _norm_title(x['title'])
+        if not k:
+            best[id(x)] = x
+            continue
+        cur = best.get(k)
+        if cur is None or x['impact'] > cur['impact']:
+            best[k] = x
+    out = list(best.values())
+
+    kept = []
+    for x in sorted(out, key=lambda i: -i['impact']):
+        tx = _toks(x['title']); dup = False
+        for y in kept:
+            if (x['section'], x['entity'], x.get('media_kb')) != (y['section'], y['entity'], y.get('media_kb')):
+                continue
+            ty = _toks(y['title'])
+            if tx and ty and len(tx & ty) / len(tx | ty) >= 0.5:
+                dup = True
+                break
+        if not dup:
+            kept.append(x)
+    return kept
+
+
+# 限额：None 表示该板块/品牌不设上限（用户口径：海外品牌不限额）
+CAP = {'海外企业': None, '企业领导人': None, '国内企业': None, '自动驾驶': None}
 
 
 def main():
@@ -126,6 +182,9 @@ def main():
         s, e = unique_placement(x, alias_index)
         x['section'], x['entity'] = s, e
 
+    # 去重必须在限额之前（见 dedup_items 注释）
+    data = dedup_items(data)
+
     buckets = collections.defaultdict(list)
     for x in data:
         buckets[(x['section'], x['entity'])].append(x)
@@ -134,9 +193,10 @@ def main():
 
     selected_ids = set(); selected_list = []
     for (s, e), items in buckets.items():
-        cap = CAP.get(s, 6)
+        cap = CAP.get(s)
         items_sorted = sorted(items, key=lambda x: (x['pscore'] > 0, x['pscore'], x['impact']), reverse=True)
-        for x in items_sorted[:cap]:
+        picked = items_sorted if cap is None else items_sorted[:cap]
+        for x in picked:
             key = (x['url'], s, e)
             if key in selected_ids:
                 continue
