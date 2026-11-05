@@ -52,12 +52,12 @@ python scripts/curation.py \
 ```
 不设品牌配额。`SELECTED COUNT` 与候选数的差额来自去重，不是限额。`pscore` 只排序，不决定是否收录。终端会打印 `TRANSLATION LIST`。
 
-**Step 3 — 事件级去重 + 排序编号**
+**Step 3 — URL / 同题去重 + 排序编号**
 ```bash
 python scripts/prep_final.py --input curated.json --out final.json
 ```
 打印 `TRANSLATION LIST (idx | media_kb | section | entity | title)`，**此清单的 idx 顺序即最终报告顺序**。
-默认同一个事件留 1 条。`--per-event N` 可改保留条数，`--no-event-dedup` 关闭事件级去重。
+默认同一家媒体的重复稿会去掉，不同媒体对同一事件的报道都保留。需要收成每个事件一条时再加 `--event-dedup`，并用 `--per-event N` 改保留条数。定时命令不要加这个参数。
 
 **Step 4 — 生成翻译模板**
 ```bash
@@ -90,7 +90,7 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
 - [ ] 残留新闻稿（Press Release）为 0。
 - [ ] 四个栏目顺序为 国内企业 → 自动驾驶 → 海外企业 → 企业领导人。
 - [ ] 超链接数量 == final 条数（每篇报道一个外部链接）。
-- [ ] 同一报道、同一事件只留代表稿（URL、同题、事件去重生效）。
+- [ ] 同一 URL、同一标题、同一媒体的近题重复已去掉。不同媒体的同事件报道默认都在。
 - [ ] 无标题粘连条目。
 - [ ] 中文行无残留英文领导人全名（如 `Satya Nadella` 已替换为 `萨提亚·纳德拉`）。
 - [ ] 领导人板块 H2 为「中文名（英文名｜公司）」格式。

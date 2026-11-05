@@ -27,7 +27,8 @@ DOMESTIC_BRANDS = {
     '混元/Hunyuan': ['hunyuan', '混元'], '快手/Kuaishou': ['kuaishou', '快手'], '可灵/Kling': ['kling', '可灵'],
     '智谱/Zhipu': ['zhipu', '智谱'], 'MiniMax': ['minimax', '稀宇'],
     # 产品名一律归到所属公司：Kimi → 月之暗面/Moonshot
-    '月之暗面/Moonshot': ['moonshot', '月之暗面', 'kimi'],
+    # Moonshot 大小写敏感：公司名首字母大写（Moonshot AI / Moonshot）；小写 moonshot 多指登月计划
+    '月之暗面/Moonshot': ['!(?<![A-Za-z])(?:Moonshot|MOONSHOT)(?![A-Za-z])', '月之暗面', 'kimi'],
     '百川智能/Baichuan': ['baichuan', '百川'], '零一万物/01.AI': ['01.ai', '01ai', '零一万物'],    '深度求索/DeepSeek': ['deepseek', '深度求索'], 'Manus': ['manus', '蝴蝶效应'], '华为/Huawei': ['huawei', '华为'],
     '沐曦/MetaX': ['metax', '沐曦'], '摩尔线程/Moore Threads': ['moore threads', '摩尔线程'], 'SHEIN/希音': ['shein', '希音'],
     '拼多多/Pinduoduo': ['pinduoduo', '拼多多'], 'PDD': ['pdd'], 'Temu': ['temu'], '小米/Xiaomi': ['xiaomi', '小米'],
@@ -76,12 +77,19 @@ OVERSEAS_LEADERS = {
 
 
 def compile_aliases(d):
+    """别名编译。前缀约定：
+      '~' 后接自定义正则，大小写不敏感；
+      '!' 后接自定义正则，**大小写敏感**（用于区分专有名词与普通词，如 Moonshot 公司 vs moonshot 登月）；
+      其余按字面量加词边界，大小写不敏感。
+    """
     out = {}
     for canon, alist in d.items():
         pats = []
         for a in alist:
             if a.startswith('~'):
                 pats.append(('re', re.compile(a[1:], re.I)))
+            elif a.startswith('!'):
+                pats.append(('re', re.compile(a[1:])))
             elif re.search(r'[一-鿿]', a):
                 pats.append(('sub', a))
             else:
@@ -105,15 +113,21 @@ def parse_keywords(s):
     return {}
 
 
-def match_in_text(text_lower, compiled):
+def match_in_text(text, compiled):
+    """在文本中匹配别名表。
+
+    传入**原始大小写**文本：别名表中 '!' 前缀的正则大小写敏感（用于 Moonshot 公司 vs moonshot 登月），
+    若先转小写则永远匹配不到。其余正则均为 re.I，用原串同样正确；中文 'sub' 不受影响。
+    """
+    text_l = text.lower()
     found = []
     for canon, pats in compiled.items():
         for kind, p in pats:
             if kind == 'sub':
-                if p in text_lower:
+                if p in text:
                     found.append(canon); break
             else:
-                if p.search(text_lower):
+                if p.search(text):
                     found.append(canon); break
     return found
 
@@ -158,6 +172,7 @@ SRC_TO_KB = {
     'Washington Post - Opinions': 'The Washington Post', 'Aljazeera International': 'AI Jazeera',
     'BNN Bloomberg Online': 'BNN Bloomberg', 'KNTV-TV Online': 'NBC Bay Area',
     'KPYX-TV Online': 'CBS', 'KOVR-TV Online': 'CBS',
+    'Nikkei Asian Review': 'Nikkei Asia', 'Nikkei Asia Review': 'Nikkei Asia',
 }
 
 
@@ -185,7 +200,7 @@ EXCL = [
     ('纯估值倍数评论(低价值)', re.compile(r'(forward p/e|price-to-earnings|p/e ratio)', re.I)),
     ('消费电子评测/导购', re.compile(r'(ipad|iphone|airpods|earbuds|apple watch|macbook|pixel|galaxy|surface|kindle|headphones|smartwatch|tablet|laptop).{0,45}(hands-on|review|should you buy|unboxing|first look|worth (?:it|buying)|i tried|tested)', re.I)),
     ('股评/荐股栏目', re.compile(r"(bulls vs\.? bears|money quote|heard on the street|cramer|stop trading|bloomberg talks|options action|stock movers|what'?s going on with .{0,30}stock|s&p 500 futures|top picks|trading ideas)", re.I)),
-    ('分析师评级/目标价/荐股', re.compile(r'(price target|analyst (?:forecast|rating|note|sees|says|thinks)s?|top \d+ analyst|top analyst|here are \d+ top|\btrade the fear\b|buy rating|sell rating|\boverweight\b|\bunderweight\b|\d+% (?:upside|potential)|stock: |to \$?\d+\?|slowdown begin|stocks? to watch|stocks? making the biggest|shares remain attractive|longtime bull|bull who defends|steep valuation|mack daddy)', re.I)),
+    ('分析师评级/目标价/荐股', re.compile(r'(price target|analyst (?:forecast|rating|note|sees|says|thinks)s?|top \d+ analyst|top analyst|here are \d+ top|\btrade the fear\b|buy rating|sell rating|\boverweight\b|\bunderweight\b|\d+% (?:upside|potential)|stock: |to \$?\d+\?|slowdown begin|stocks? to watch|stocks? making the biggest|scoops? up|ark (?:sells|buys)|implodes|sheds \$|forget \w+: why|safe haven|long-term investors|next \d+ trading days|watchlist|bullpen|shares remain attractive|longtime bull|bull who defends|steep valuation|mack daddy|absurdly cheap|deeply undervalued|hidden gem|worth buying now|is a buy\b|time to buy|overvalued|undervalued|fair value)', re.I)),
     ('消费硬件价格/规格', re.compile(r'(rtx \d|\bgpu\b.{0,25}(price|hike|shortage)|graphics card|gb of vram)', re.I)),
     ('财经视频/综述栏目', re.compile(r'^(?:watch |video:)| - bloomberg$|world in brief|in brief:', re.I)),
     ('广告/营销软文', re.compile(r'(shopping ads|tuning bids|more than scaling|advertorial|sponsored content)', re.I)),
@@ -198,12 +213,70 @@ EXCL = [
     ('苹果手机/硬件配件(低相关)', re.compile(r'(retail security brackets|security brackets for apple|iphone duo|apple homeview|ipad.{0,20}(bracket|case|cover))', re.I)),
     ('低价值股市噪音', re.compile(r'(etf.{0,40}adds|quality factor etf|adds apple and microsoft|intel q3 earnings preview: stock down|what is going on with intel stock|could a rally get president trump to highlight)', re.I)),
     ('低价值/无关内容', re.compile(r'(dear .* stock fans|mark your calendars for|how much traders expect .* stock to move|\$\d+ off right now|let the rationalizing begin|reminds .* investors of .* class action|securities class action lawsuit deadline|equity action reminder|lead plaintiff deadline|flippening|to do my job for a day|terra 6\.1|are \$?\d+ off)', re.I)),
+    # 律所/事故索赔广告（非公司新闻）："Car Accident Attorney Explains Uber Claims" 之类
+    ('律所/事故索赔广告', re.compile(r'(accident attorney|accident lawyer|injury attorney|injury lawyer|car accident|truck accident|personal injury|claims? (?:against|for) .{0,20}(uber|lyft)|free consultation|no win no fee)', re.I)),
+    # 商业软文/产品上架：合作伙伴获奖、Marketplace 上架、集成公告
+    ('商业软文/产品上架', re.compile(r'(wins? (?:two |three )?\d{4} .{0,30}awards?|partner awards?|is now available on .{0,30}marketplace|announces? (?:the )?(?:launch|availability) of .{0,30}(?:on|in) .{0,20}marketplace|logo new website|otc:|brings .{0,45}into .{0,30}(?:management|platform)|integrates .{0,30}into its platform)', re.I)),
+    # 生活/情感专栏（AI 陪伴、情感建议类，非产业情报）
+    ('生活/情感专栏', re.compile(r'(dating advice|ask ai for|my (?:love|dating) life|relationship advice|should you (?:date|marry)|friends to stay with|is it rude|sparks? a debate|my \d+ .{0,25}speakers)', re.I)),
+    # 个人理财/攻略清单：用 AI 赚钱/还债/致富类点击文
+    ('个人理财/攻略', re.compile(r'(\d+\s+(?:chatgpt|gemini|claude|copilot) prompts?|prompts? to (?:get out of debt|make money|build wealth|save money)|get out of debt|build(?:ing)? wealth|start (?:a|your) (?:side hustle|business) with ai|make \$?\d+ (?:a|per) (?:day|week|month) with ai)', re.I)),
+    # 清单体/调侃文：N 种方式、N 件事、N 个教训——无产业信息
+    ('清单体/调侃文', re.compile(r'(\b\d+\s+(?:better |best |worst |other |more )?(?:ways|things|reasons|lessons|signs|rules|habits|mistakes|questions)\b|\bcould have (?:wasted|spent|done)\b|what we can learn from)', re.I)),
+    # 他业类比「XX 界的 Uber」：主语不是本公司，属比喻式报道
+    ('人物/影视访谈', re.compile(r'(on life since|since the release of (?:his|her)|the man who inspired|the woman who inspired|talks? about (?:his|her) new (?:film|book))', re.I)),
+    ('他业类比(非本公司)', re.compile(r'(?:the|an?)\s+["“]?uber of\b|\buber for\b|\buber-of-', re.I)),
 ]
 EXCL_ECOMM = re.compile(r'(e-?commerce|warehouse|fulfillment|logistics|shipping|retail sales|online retail)', re.I)
+
+# 以下规则**只作用于标题**。它们描述的是「报道体裁」（股评、行情快讯、促销、评测、估值评论），
+# 体裁特征必然体现在标题上；若连摘要一起扫，摘要里常见的 "premarket trading"、
+# "discount platform"、"movie" 等词会造成误剔（实例：Apple 内存涨价稿因摘要含 premarket trading 被剔）。
+TITLE_ONLY_RULES = {
+    '大盘/指数行情', '股评/荐股栏目', '分析师评级/目标价/荐股', '消费电子评测/导购',
+    '消费硬件价格/规格', '纯估值倍数评论(低价值)', '投资论点/估值', '财经栏目/通讯',
+    '财经视频/综述栏目', '系统使用技巧(非竞争情报)', '广告/营销软文', '低价值股市噪音',
+    '财报电话会逐字稿(低价值)', '生活/消费杂讯(低价值)', '律所/事故索赔广告',
+    '商业软文/产品上架', '生活/情感专栏', '个人理财/攻略', '清单体/调侃文', '他业类比(非本公司)', '人物/影视访谈',
+}
+
+# 纯政治评论：选举horse-race、民调、党派攻防——不含任何商业/AI/产品信号时无竞争情报价值。
+# 仅当标题同时出现商业信号（合同/监管/估值/产品/公司经营）时才保留。
+POLITICS_PAT = re.compile(
+    r'(midterm|mid-term|election day|election result|blue wave|red wave|\bvoters?\b|ballot|'
+    r'poll(?:s|ing)?\b|gop|democrat|republican|senate race|primary race|trump|biden|'
+    r'political fortune|spent \$|spending \$|spend \$|donor|pac\b|super pac|endors(?:e|ed|ement)|'
+    r'campaign|inaugurat|swing state|texas turns blue|vote red|lost the election|election bet|'
+    r'midterms failure|political party|talarico|mamdani|sanders accuses|politics|\bsenate\b|\bcongress\b|campaign trail|re-election bid)', re.I)
+BUSINESS_SIGNAL_PAT = re.compile(
+    r'(\bai\b|artificial intelligence|\bchip|semiconductor|datacent|data cent|robotaxi|'
+    r'self-driving|autonomous|\brobot\b|contract|tariff|antitrust|lawsuit|\bdoj\b|\bftc\b|\bsec\b|'
+    r'regulation|regulator|\bipo\b|valuation|revenue|earnings|guidance|\bproduct\b|model|'
+    r'satellite|starlink|spacex|tesla|\bspcx\b|xai|grok|\bx\.ai\b|wireless|spectrum|launch)', re.I)
+
+# 促销/折扣/导购（只看标题）：任何品牌的纯促销都无竞争情报价值。
+# 不能用裸 deal（"ADNOC OpenAI Deal" 是商业交易）、裸 sale（"sales" 是销售额）、
+# 裸 discount（"discount shopping platform" 指折扣电商模式）。
+PROMO_PAT = re.compile(
+    r'(\$\d[\d,]*\s*off|\d+\s*(?:%|percent)\s*off|price (?:drop|cut|slashes?)\b|record[- ]low(?:est)? price|lowest price (?:ever|yet)'
+    r'|black friday|cyber monday|prime (?:day|big deal day)|\bbest .{0,25}deals?\b|deals? of the (?:day|week)'
+    r'|discount code|\bcoupon\b|save \$\d|gift guide|already on sale|\bon sale (?:now|for|at)\b|\bclearance\b|flash sale'
+    r'|drops? to \$\d|slashed? to \$\d'
+    r'|(?:echo dot|echo show|kindle|fire tv|fire tablet|fire stick|ring (?:camera|doorbell)|\bblink\b|\beero\b'
+    r'|nest (?:hub|cam|thermostat)|chromecast|pixel buds|pixel \d+\w?|apple tv 4k|airpods|apple watch|ipad|iphone|macbook)'
+    r'.{0,45}(price (?:drop|cut|slashes?)|record[- ]low|\$\d[\d,]*\s*off|\d+%\s*off|\bcoupon\b|drops? to \$\d))',
+    re.I)
 
 # Apple（水果）语境：菜谱/果园/果汁等；对照的科技语境用于排除误伤
 APPLE_FOOD_PAT = re.compile(r'(recipe|chef|cook|bake|baking|dessert|orchard|apple cider|apple pie|baked apple|candy apple|fruit|mussels|chorizo|cider|harvest|variet(?:y|ies) of apple|apple tree)', re.I)
 APPLE_TECH_PAT = re.compile(r'(iphone|ipad|macbook|\bmac\b|ios|macos|siri|tim cook|cupertino|app store|apple pay|apple watch|airpods|vision pro|apple intelligence|apple inc)', re.I)
+
+# Apple 影视内容（Apple TV+ 剧集/电影）——属内容业务，非硬件或 AI 竞争情报
+APPLE_MEDIA_PAT = re.compile(r'(apple\s*tv\+|apple\s*tv\b(?!\s*4k)|apple studios|apple original|(?:tv|television) (?:series|show|drama|comedy|thriller)|streaming (?:series|show)|renews? .{0,30}for season|season \d+|episode \d|box office|emmy|oscar|golden globe|documentary|premiere)', re.I)
+
+# 登月计划 vs 月之暗面：登月语境（NASA/moon/lunar/spacecraft）优先，且该 moonshot 为小写或非公司语境
+LUNAR_PAT = re.compile(r'(\bnasa\b|\bmoon\b|lunar|spacecraft|space mission|rocket|artemis|apollo|orbit|astronaut|spacex 星舰|登月|月球)', re.I)
+MOONSHOT_COMPANY_PAT = re.compile(r'(moonshot\s*(?:ai|kimi)|kimi|月之暗面|\bai startup\b|\bllm\b|large language model|杨植麟|zhilin)', re.I)
 
 # 新闻稿/通稿（Press Release）电头标记，扫描 标题/作者/摘要
 PR_PAT = re.compile(r'(press ?release|prnewswire|pr newswire|globe ?newswire|einpresswire|ein ?presswire|business ?wire|news ?direct|marketwire|accesswire|prweb|issuewire|send2press|newsfile|cision|/pr ?newswire/)', re.I)
@@ -212,7 +285,16 @@ PR_PAT = re.compile(r'(press ?release|prnewswire|pr newswire|globe ?newswire|ein
 # ================= 精细化口径（9 条 + 后续修正） =================
 # 1) Yahoo Finance 纯股价分析降噪：仅 source 含 yahoo 且为纯股价波动、无实质话题时剔除
 YAHOO_STOCK_PAT = re.compile(r'(shares (?:rise|fall|jump|slip|drop|climb|tumble|soar|plunge|gain|lose|rally|slide|surge|sink|slump|edge|tick)|stock (?:rises|falls|jumps|slips|drops|climbs|tumbles|pops|slides|sinks|slumps|rallies|edges)|price target|upgraded|downgraded|buy rating|sell rating|analyst rating|stock price|market cap|catalyst|options trade|calls and puts|why .* stock)', re.I)
-SUBSTANTIVE_PAT = re.compile(r'(\bai\b|artificial intelligence|\bagent\b|robotaxi|cybercab|robot|\bchip|semiconductor|cloud|\baws\b|autonomous|self-driving|fsd|model|earnings|revenue|profit|regulation|antitrust|lawsuit|probe|investigat|\bipo\b|funding|valuation|launch|partnership|deal|tariff|\bchina\b|political|election|trump|biden|senate|congress|white house)', re.I)
+SUBSTANTIVE_PAT = re.compile(r'(\bai\b|artificial intelligence|\bagent\b|robotaxi|cybercab|robot|\bchip|semiconductor|memory|dram|nand|margin|pricing|supply chain|cloud|\baws\b|autonomous|self-driving|fsd|model|earnings|revenue|profit|guidance|outlook|regulation|antitrust|lawsuit|probe|investigat|\bipo\b|funding|valuation|launch|partnership|deal|tariff|\bchina\b|political|election|trump|biden|senate|congress|white house)', re.I)
+
+# 纯股价波动（不限来源）：标题只描述股价涨跌/评级，无实质议题时剔除。
+# 注意只匹配「股票/股价 + 涨跌动词」这种结构，避免误伤 "sales rise"（销售额增长）等实质数据。
+STOCK_MOVE_PAT = re.compile(
+    r'(\b(?:stock|shares?)\s+(?:rises?|falls?|jumps?|slips?|drops?|climbs?|tumbles?|pops?|slides?|sinks?|slumps?|rallies|edges?|surges?|soars?|plunges?|gains?|loses?|ticks?|wavers?|retreats?)\b'
+    r'|\b(?:stock|shares?)\s+(?:climb|rise|fall|drop|jump|slide)s?\s+(?:amid|as|on|after)\b'
+    r'|what(?:\'s| is| are)?\s+going on with .{0,30}stock|stock (?:price|movement)s?\b|market cap (?:falls|rises|drops|tops)\b'
+    r'|\bpremarket\b|\bafter-hours\b)',
+    re.I)
 
 # 2) 马斯克（领导人）+ 特斯拉 话题门控：仅基于 标题+摘要+关键词（避免正文 transcript 污染）
 #    剔除：星链/SpaceX/推特/X(Twitter)/Grok、特斯拉 EV/股价/销量 等非重点；
@@ -268,13 +350,43 @@ def is_broken_title(title):
     return False
 
 
-def exclusion_reason(text, source, is_overseas):
+def exclusion_reason(text, source, is_overseas, title=None):
+    """text = 标题+摘要（用于通用低价值规则）。
+    title = 原始标题（可选）；促销/影视/纯股价三类**只看标题**，
+    因为摘要里常出现 discount shopping platform、movie 类比等非促销语境，会造成误剔。"""
+    head = title if title is not None else text
     for name, pat in EXCL:
-        if pat.search(text):
+        target = head if name in TITLE_ONLY_RULES else text
+        if pat.search(target):
             return name
+    # —— 以下三类只看标题 ——
+    # 促销/折扣：标题即促销特征的才剔（摘要里的 "discount platforms" 是商业模式）
+    if PROMO_PAT.search(head):
+        return '促销/折扣/导购'
+    # "Big Apple" 指纽约市，不是苹果公司
+    if re.search(r'big apple', head, re.I) and not re.search(r'iphone|ipad|macbook|siri|cupertino|tim cook|ternus', head, re.I):
+        return 'Big Apple=纽约(非苹果公司)'
     # 苹果（水果/食材）与苹果公司同名：菜谱、果园、果汁类报道不得计入 Apple
-    if re.search(r'\bapple\b', text) and APPLE_FOOD_PAT.search(text) and not APPLE_TECH_PAT.search(text):
+    if re.search(r'\bapple\b', head, re.I) and APPLE_FOOD_PAT.search(head) and not APPLE_TECH_PAT.search(head):
         return '苹果(水果/食材，非公司)'
+    # Apple TV+ 剧集/电影：内容业务，非硬件或 AI 竞争情报（Apple TV 4K 机顶盒除外）
+    if re.search(r'\bapple\b', head, re.I) and APPLE_MEDIA_PAT.search(head) and not APPLE_TECH_PAT.search(head):
+        return '苹果影视内容(Apple TV+/剧集，非硬件或AI)'
+    # moonshot 登月计划：
+    #   a) 有小写 moonshot（通名，指登月式构想）且无公司语境 → 剔除
+    #   b) 有登月语境（NASA/moon/lunar）且非公司语境 → 剔除
+    if re.search(r'(?<![A-Za-z])moonshot(?![A-Za-z])', head) and not MOONSHOT_COMPANY_PAT.search(head):
+        return 'moonshot=小写通名(登月式构想，非月之暗面公司)'
+    if re.search(r'\bmoonshot\b', head, re.I) and LUNAR_PAT.search(head) and not MOONSHOT_COMPANY_PAT.search(head):
+        return 'moonshot=登月计划(非月之暗面公司)'
+    # 纯股价波动：标题只描述股价涨跌、无实质议题 → 剔除
+    if STOCK_MOVE_PAT.search(head) and not SUBSTANTIVE_PAT.search(head):
+        return '纯股价波动(无实质议题)'
+    # 纯政治评论（选举horse-race/民调/党派攻防）：不含商业信号时无竞争情报价值。
+    # 例：「Texas Turns Blue in Rebuke of Trump, Musk and GOP」→ 剔；
+    #     「Musk's SpaceX wins $X Pentagon contract」→ 含 contract/military，保留。
+    if POLITICS_PAT.search(head) and not BUSINESS_SIGNAL_PAT.search(head):
+        return '纯政治评论(非产业情报)'
     if 'amazon' in text and EXCL_ECOMM.search(text) and not re.search(r'\bai\b|artificial intelligence|robot|autonomous|cloud|\baws\b|chip|semiconductor|model| alexa ai', text, re.I):
         return '亚马逊电商/物流(非AI)'
     return None
@@ -284,7 +396,11 @@ def topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl, title_l, excerpt_l, kwkey
     """精细化口径：针对具体品牌/来源的话题门控，命中则返回剔除原因。
     门控同样只凭「标题」判断，不读摘要/关键词/正文——与归属判定保持同一口径。"""
     head = title_l
-    # 1) Yahoo Finance 纯股价分析降噪
+    # 1) 纯股价波动降噪（不限来源）：仅当标题是股价涨跌且无任何实质议题时剔除
+    #    （覆盖 Benzinga "X Stock Climbs..."、Yahoo 股价快讯等；有财报/芯片/AI/监管等实质议题则保留）
+    if STOCK_MOVE_PAT.search(head) and not SUBSTANTIVE_PAT.search(head):
+        return '纯股价波动(无实质议题)'
+    # 1b) Yahoo 专属：股价+评级类软分析（即使提到 earnings 也多为复述，仍按原口径降噪）
     if 'yahoo' in source.lower():
         if YAHOO_STOCK_PAT.search(head) and not SUBSTANTIVE_PAT.search(head):
             return 'Yahoo 纯股价分析(降噪)'
@@ -382,8 +498,9 @@ def main():
             """仅凭「标题」判定品牌/领导人的归属。
             不看摘要、不看关键词频次、不看正文——关键词字段是「词→频次」映射，
             靠它归位会把 Qualcomm 财报挂到 Uber、Yum China 挂到 美团、
-            Chevy Bolt 车评挂到 GM Cruise。标题点名才算该品牌的报道。"""
-            return match_in_text(title_l, compiled)
+            Chevy Bolt 车评挂到 GM Cruise。标题点名才算该品牌的报道。
+            传入原始大小写标题：个别别名（如 Moonshot）需区分大小写。"""
+            return match_in_text(title, compiled)
 
         dom_b = placed(C_DOM_B); dom_l = placed(C_DOM_L)
         auto_b = placed(C_AUTO_B); auto_l = placed(C_AUTO_L)
@@ -394,10 +511,11 @@ def main():
                 auto_b.append('Cruise')
 
         is_overseas = bool(ovb or ovl)
-        reason = exclusion_reason(excl_text, source, is_overseas)
+        reason = exclusion_reason(excl_text, source, is_overseas, title=title)
         if not reason:
+            # 传原始标题：门控内正则多为 re.I，但保留大小写便于后续加精确规则
             reason = topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl,
-                               title_l, excerpt_l, kwkeys_l, content.lower(), source)
+                               title, excerpt_l, kwkeys_l, content.lower(), source)
         if reason:
             continue
 

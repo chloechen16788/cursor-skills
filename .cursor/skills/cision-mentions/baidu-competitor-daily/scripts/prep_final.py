@@ -35,20 +35,62 @@ EV_STOP = {
     'here', 'there', 'now', 'just', 'still', 'first', 'could', 'would', 'may', 'might', 'one',
     'two', 'three', 'apple', 'google', 'alphabet', 'microsoft', 'nvidia', 'tesla', 'intel',
     'amazon', 'anthropic', 'openai', 'uber', 'lyft', 'waymo', 'zoox', 'xpeng', 'tiktok', 'tencent',
+    # 人名与高频虚动词：它们几乎出现在同品牌的每条标题里，计入共享会虚高相似度
+    'elon', 'musk', 'altman', 'amodei', 'huang', 'cook', 'ternus', 'khosrowshahi', 'zuckerberg',
+    'nadella', 'pichai', 'jassy', 'bezos', 'wants', 'want', 'set', 'back', 'make', 'makes',
+    'need', 'needs', 'take', 'takes', 'get', 'gets', 'hold', 'holds', 'keep', 'keeps', 'see',
+    'sees', 'say', 'says', 'told', 'tell', 'like', 'best', 'top', 'big', 'next', 'last',
+    'year', 'years', 'day', 'days', 'week', 'time', 'times', 'way', 'ways', 'thing', 'things',
+    'use', 'uses', 'using', 'used', 'plan', 'plans', 'planned', 'launch', 'launches', 'launched',
+    # 本公司产品名（作用等同品牌名）：同品牌每条都可能提到，不能作为同事件证据
+    'claude', 'chatgpt', 'gemini', 'copilot', 'grok', 'siri', 'codex', 'gpt', 'llm', 'kimi',
 }
 
 
+# 词形归一化：英美拼写、数字缩写、单复数。缺了这层，
+# "data center expansion" 与 "data centre expansion"、"$15bn" 与 "$15 billion" 会被当成不同事件。
+EV_SYN = {'centre': 'center', 'centres': 'center', 'bn': 'billion', 'us$': 'billion',
+          'dollars': 'billion', 'dollar': 'billion', 'cents': 'cent'}
+
+# 通用技术/商业名词：出现在任何一条标题里都不足以证明「同一事件」。
+# 缺这层会把 "TeraWulf gets credit backstop for Anthropic data-center project"
+# 并进 "Google to invest $15bn in Malaysia's data center expansion"——只因共享 {data, center}。
+EV_GENERIC = {
+    'data', 'center', 'centre', 'model', 'code', 'cloud', 'chip', 'platform', 'service',
+    'feature', 'update', 'launch', 'product', 'market', 'company', 'business', 'tech',
+    'technology', 'app', 'user', 'customer', 'custom', 'price', 'cost', 'deal', 'sale',
+    'growth', 'demand', 'supply', 'invest', 'investment', 'billion', 'million', 'fund',
+    'funding', 'raise', 'offer', 'partner', 'partnership', 'global', 'world', 'industry',
+}
+
+
+def _canon(w):
+    w = EV_SYN.get(w, w)
+    if len(w) > 4 and w.endswith('ies'):
+        return w[:-3] + 'y'
+    if len(w) > 4 and w.endswith('es') and not w.endswith('ses'):
+        return w[:-2]
+    if len(w) > 3 and w.endswith('s') and not w.endswith('ss'):
+        return w[:-1]
+    return w
+
+
 def ev_tokens(t):
-    return {w for w in re.findall(r'[a-z0-9]+', t.lower()) if len(w) >= 3 and w not in EV_STOP}
+    t = re.sub(r'(\d+)\s?bn\b', r'\1billion', t.lower())
+    return {_canon(w) for w in re.findall(r'[a-z0-9]+', t) if len(w) >= 3 and w not in EV_STOP}
 
 
 def event_dedup(items, per_event=1, rare_df=4):
     """同一事件的多家转载合并，每个事件保留最靠前的 per_event 条。
 
-    判定：同板块+同实体内，若两条标题 Jaccard>=0.5，或共享 >=2 个「稀有实词」
-    （该品牌候选内出现次数 <= rare_df），视为同一事件。
-    稀有词签名能让「Apple warns memory prices...」与「Apple forecasts margin drop
-    as rising memory costs bite」归并，同时不误合「Siri 开放给开发者」与「AI 代理风险」。
+    判定（满足任一即同事件）：
+      1. Jaccard >= 0.5                        —— 近乎同题（同一稿本地台分发）
+      2. 共享 >= 2 个稀有实词（df <= rare_df）  —— 措辞不同但事件词一致
+      3. 共享 >= 3 个实词且至少 1 个稀有        —— 各家换主语、事件词一致
+      4. 共享 >= 2 个实词且至少 1 个稀有        —— 覆盖「Mamdani 指控 / Sanders 指控 / 课堂噩梦」
+         这类主语各异、只共享 {accuses, school} 的同一事件报道
+    判据 4 偏松，但配合 EV_STOP 剔除品牌名/人名/虚动词 + 词形归一化，实测未出现跨事件误并。
+    若某批数据出现过度合并，用 --per-event 2 或调严此处。
     """
     out = []
     groups = defaultdict(list)
@@ -71,9 +113,15 @@ def event_dedup(items, per_event=1, rare_df=4):
                 ty = c['tok']
                 if not tx or not ty:
                     continue
-                jac = len(tx & ty) / len(tx | ty)
-                rare_shared = {w for w in (tx & ty) if df[w] <= rare_df}
-                if jac >= 0.5 or len(rare_shared) >= 2:
+                shared = tx & ty
+                jac = len(shared) / len(tx | ty)
+                # 有效稀有词：低频 **且** 不是通用技术/商业名词。
+                # 只看低频是不够的——"data"/"center" 因只出现在一小簇里反而低频，
+                # 会把「TeraWulf 为 Anthropic 数据中心做信用背书」并进「谷歌投资马来西亚数据中心」。
+                rare_shared = {w for w in shared if df[w] <= rare_df and w not in EV_GENERIC}
+                if (jac >= 0.5
+                        or len(rare_shared) >= 2
+                        or (len(shared) >= 2 and rare_shared)):
                     c['items'].append(x)
                     c['tok'] = tx | ty
                     placed = True
@@ -89,8 +137,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input', required=True)
     ap.add_argument('--out', default='final.json')
-    ap.add_argument('--per-event', type=int, default=1, help='同一事件保留几条代表稿，默认 1')
-    ap.add_argument('--no-event-dedup', action='store_true', help='关闭事件级去重（保留全部同事件稿）')
+    ap.add_argument('--event-dedup', action='store_true',
+                    help='启用事件级去重：同一事件只留代表稿（默认关闭——不同媒体的同事件报道全部保留）')
+    ap.add_argument('--per-event', type=int, default=1, help='配合 --event-dedup：同一事件保留几条，默认 1')
+    ap.add_argument('--no-event-dedup', action='store_true', help='（已废弃，默认即为此行为）')
     args = ap.parse_args()
 
     final = json.load(open(args.input))
@@ -173,7 +223,9 @@ def main():
     # 2d) 事件级去重：同一事件被多家媒体分别报道时（标题措辞差异大、URL/媒体都不同），
     #     前两步都抓不到，会导致「Google 关闭学校搜索」出现 12 次。
     #     按稀有实词签名归并，每个事件保留最靠前的 per_event 条。
-    if not args.no_event_dedup:
+    # 默认不做事件级去重：不同媒体对同一事件的报道各自独立，全部保留。
+    # 仅当显式 --event-dedup 时才收敛为每事件 per_event 条。
+    if args.event_dedup:
         final = event_dedup(final, per_event=args.per_event)
 
     # 3) 排序：板块顺序 -> 实体内按事件归并 -> 影响力
