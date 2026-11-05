@@ -79,12 +79,14 @@
 > 完整执行顺序见 `workflow.md`；脚本产出即为最终形态，一般无需手工调整。
 
 ```
-英文媒体：英文标题（超链接）
-中文媒体：中文标题
+英文媒体: 英文标题        ← 半角冒号+空格；三段均为超链接（同指向原文）；整体加粗
+中文媒体：中文标题        ← 全角冒号；不带链接；整体加粗
 ```
 
+- **英文行用半角冒号 `: `**，且**媒体名、冒号、英文标题三段各自包在超链接里**，都指向同一原文 URL。
+- **条目内容一律加粗**：英文行三段、中文行的媒体名与标题，以及文档大标题，全部 `w:b`。
+  中文行仍为全角冒号 `：`、不带链接。副标题与「筛选说明」为说明性文字，保持浅灰细体。
 - 中文媒体名**不带书名号**（例：「财富」「CNBC」按 KB 显示）。
-- 英文标题行保留英文原名 + 外部超链接（符合「英文媒体：英文标题」）。
 - 中文标题内出现的领导人英文全名，自动替换为《翻译知识库》标准中文译名。
 
 ## 七、竞品 / 领导人别名表（当前口径）
@@ -134,7 +136,7 @@
 4. **剔除判定**只用 标题+摘要（摘要仅用于识别 PR 电头与硬件/生活类），不读关键词与正文。
 5. **三道去重**（`prep_final.py`）：URL 去重 → 精确标题去重（CBS 本地台同一稿）→ **近似标题去重**（同板块+同实体+同媒体，词集 Jaccard ≥ 0.5 保留 impact 最高一条；解决 Bloomberg 改题重发的行情综述、WSJ 同选题双标题）。
 6. **新增低价值剔除**：财报电话会逐字稿（`earnings call transcript`）、生活/消费杂讯（ambulance driver / did you know you can use / options action:）、系统使用技巧（`windows 11 … faster/8GB/requirements`）、纯估值倍数评论（`forward p/e`）。
-7. **`ACTUAL_EARNINGS_PAT` 去掉 `results (?:on|of)`**；**`AMAZON_KEEP` 去掉裸 `\bai\b` 和裸 `deal`**（改用 aws/cloud/chip/agent/zoox/anthropic/openai 等实质信号）。`Kindle deal` 不保留。
+7. **`ACTUAL_EARNINGS_PAT` 去掉 `results (?:on|of)`**；**`AMAZON_KEEP` 去掉裸 `\bai\b`**（改用 aws/cloud/chip/agent/zoox 等实质信号）。
 
 ## 十、2026-11-04 二次修正（取消限额 · 事件去重 · 前瞻分板块）
 
@@ -186,3 +188,153 @@
 
 **新增生活杂讯**：网约车纠纷（driver cancels ride / wrong direction）、钓鱼诈骗提醒（phishing scam / beware of … scam）。
 
+## 十二、2026-11-05 口径补充（促销/影视/股价 · Moonshot 大小写 · 同类话题相邻）
+
+### 1. 新增三类剔除（只看标题）
+
+体裁类特征必然写在标题上；若连摘要一起扫，会被摘要里的 **premarket trading**、**discount shopping platform**、
+**movie** 等词误伤（实例：`Apple shares slide as higher memory costs fuel margin concerns` 因摘要含
+`premarket trading` 被判为「大盘行情」而误剔）。因此新增 **`TITLE_ONLY_RULES`**：下列规则只作用于标题。
+
+| 规则 | 剔除对象 | 关键写法 |
+|---|---|---|
+| 促销/折扣/导购（`PROMO_PAT`） | 任何品牌的纯促销 | `$X off`、`X percent off`、`price drop/cut`、`record-low price`、`black friday`、`cyber monday`、`prime day`、`best ... deals`、`already on sale`、`drops to $X` |
+| 苹果影视内容（`APPLE_MEDIA_PAT`） | Apple TV+ 剧集/电影 | `apple tv+`、`apple studios`、`tv series/show`、`season N`、`box office`、`emmy/oscar` |
+| 纯股价波动（`STOCK_MOVE_PAT`） | 仅股价涨跌、无实质议题 | `stock/shares + rises/falls/climbs/slips`、`what's going on with ... stock`、`premarket` |
+
+**必须避开的误伤写法**（都已验证保留）：
+- 裸 `deal`（`ADNOC OpenAI Deal` 是商业交易）→ 只用 `best ... deals` / `deals of the day`
+- 裸 `sale`（`sales` 是销售额）→ 只用 `on sale (now/for/at)`、`already on sale`
+- 裸 `discount`（`discount shopping platform` 指折扣电商模式）→ 只用 `discount code`
+- `goes on sale`（新品开售）→ 不算促销
+- 含实质议题（memory/margin/earnings/chip/AI/监管…）的股价稿 → 保留
+- `Apple TV 4K`（机顶盒硬件）→ 不算影视
+
+### 2. Moonshot：公司 vs 登月计划
+
+`moonshot` 是普通词（登月式构想），公司名首字母大写。别名表引入 **`!` 前缀 = 大小写敏感正则**：
+
+```python
+'月之暗面/Moonshot': ['!(?<![A-Za-z])(?:Moonshot|MOONSHOT)(?![A-Za-z])', '月之暗面', 'kimi'],
+```
+
+**关键前提**：`match_in_text()` 必须接收**原始大小写**文本，否则先 `.lower()` 会让大小写敏感正则永远失配
+（曾因此让 `Moonshot AI raises $500M` 归不到月之暗面）。归属与门控现在都传原始标题。
+
+另有两道兜底（`exclusion_reason`，只看标题）：
+- 小写 `moonshot` 且无公司语境（`Moonshot AI` / `kimi` / `月之暗面` / `LLM` / `杨植麟`）→ 剔
+- 有登月语境（`NASA` / `moon` / `lunar` / `rocket` / `artemis`）且非公司语境 → 剔
+
+效果：`Moonshot AI raises $500M` ✓收、`MOONSHOT unveils new model` ✓收、
+`NASA's moonshot to the Moon` ✗剔、`A moonshot plan to cure cancer` ✗剔、
+`moonshot thinking at Google X` ✗剔且正确归 Google。
+
+### 3. 同一事件的多篇报道相邻（`build_doc.py`）—— 从数据自动发现，无手工词表
+
+**早期做法已废弃**：曾用手写事件标签（`school_ai` / `mna` / `buyout` / `watch_audio`…）。
+问题很明确——标签是照着当期数据写的，换一批数据就失效，无法支撑每日生成。**已全部删除。**
+
+现行算法（词级单链合并 + 规模护栏）：
+
+1. 每个词 → 包含它的标题集合。只出现在 1 条标题的词无共现证据；出现在 ≥80% 标题的词
+   （品牌名、`apple`、`google` 等）无区分度 —— 两者都排除。
+2. 按标题集合从大到小处理词；若某词与已有簇的标题集合重合度 ≥ `EVENT_OVERLAP`（0.5，
+   用 min 归一以容忍长短标题不对称），并入该簇。
+3. **护栏**：单簇覆盖标题数不得超过 `EVENT_CAP`（0.55）× 该实体总数。
+   没有这道护栏，大品牌会因**链式传递**塌缩成一个巨簇 —— 实测旧批次 Apple 46 条曾被并成 45 条一簇。
+4. 剩余未覆盖的标题各自独立成簇，不并成一个大「其他」。
+5. 簇间按簇内最高 `impact` 降序，簇内按 `impact` 降序。
+
+**阈值回归**（新旧两批数据同时验证）：
+
+| 参数 | 取值 | 依据 |
+|---|---|---|
+| `EVENT_OVERLAP` | 0.5 | 新批次 Google 学校政策 12 篇、马来西亚投资 8 篇、离职补偿 3 篇，Uber 财报 10 篇均完整成簇；0.6 起大簇开始碎裂 |
+| `EVENT_CAP` | 0.55 | 旧批次 Apple 46 条分为 [21,10,7,3]；无护栏时塌缩为 45 条一簇 |
+
+实测分组（新批次）：
+
+| 品牌 | 分组结果 |
+|---|---|
+| Google 25 条 | 学校搜索政策 12 / 员工离职补偿 3 / 马来西亚数据中心投资 8 / 其余独立 |
+| Uber 22 条 | Q3 财报 10 / Robotaxi 布局 4 / AI 智能体叫车 2 / 无人车队 4 |
+| 腾讯 8 条 | Oracle 取消 70 亿交易 5 / 发布 AI 模型 3 |
+
+> 已知局限：偶有 1–2 条词汇相近但事件不同的稿被带入相邻簇
+> （如 TeraWulf 数据中心融资挨着马来西亚投资）。这是纯词面方法的固有误差，
+> 代价远小于「同一事件被拆散」，且无需维护词表。
+
+定时飞书发布不跑 `build_doc.py`。发布脚本在每个品牌内仍按标题归组后按影响力排序，不会套用上面的自动分簇。分簇算法留在这里，供对照 Word 版的条目顺序。
+
+### 4. 顺带修复
+
+`SRC_TO_KB` 补 `Nikkei Asian Review → Nikkei Asia`（原缺失，导致该媒体稿件被当作野媒体丢弃）。
+
+## 十三、2026-11-05 二轮补充（纯政治 · 软文/生活类 · 事件去重加强）
+
+### 1. 纯政治评论剔除（`POLITICS_PAT`）
+
+选举 horse-race、民调、党派攻防类报道，**在不含任何商业信号时**剔除。判据是两条正则的组合：
+`POLITICS_PAT` 命中 **且** `BUSINESS_SIGNAL_PAT` 未命中 → 剔。
+
+- 剔：`Texas Turns Blue in Rebuke of Trump, Musk and GOP`、`Voters Set $400 Million of Elon Musk's Money on Fire`
+- 留：`Why Shares of Elon Musk's Tesla, SpaceX Are Sliding After the Midterm Elections`（含 tesla/股价，属市场影响）
+- 留：`Grant Cardone Warns ... Could Spell Trouble for Elon Musk's SPCX, AI Bets`（含 spcx，属业务影响）
+
+起因：`MUSK_DROP` 只匹配 星链/SpaceX/X/Grok 类稿件，纯选举评论不含这些词，因此整批中期选举报道涌入（马斯克 26 条中 19 条为选举评论）。这是规则缺口，非设计意图。
+
+### 2. 新增软文/生活类剔除
+
+| 规则 | 剔除对象 |
+|---|---|
+| 律所/事故索赔广告 | `Car Accident Attorney Explains Uber Claims`、`free consultation`、`no win no fee` |
+| 商业软文/产品上架 | `wins two 2026 ... Partner awards`、`Now Available on ... Marketplace`、`Logo New Website`、`OTC:` |
+| 生活/情感专栏 | `dating advice`、`Is It Rude to ...`、`sparks a debate`、`my 7 Sonos speakers` |
+| 个人理财/攻略 | `5 ChatGPT Prompts To Get Out Of Debt`、`prompts to make money` |
+| 清单体/调侃文 | `17 better ways ...`、`N things/reasons/lessons`、`could have wasted` |
+| 他业类比 | `the "Uber of sales"`（主语非本公司，纯比喻） |
+| 人物/影视访谈 | `On Life Since the Release of His Film`、`The Man Who Inspired ...` |
+| 估值补充 | `absurdly cheap`、`overvalued`、`undervalued`、`fair value`、`hidden gem` |
+
+另修 `STOCK_MOVE_PAT`：原只匹配 `What's Going On With ... Stock`，补 `What Is/Are` 变体。
+另加 `Big Apple` 判定——标题含 `Big Apple` 且无 iPhone/Siri/Cupertino 等科技信号时，视为纽约市而非苹果公司。
+
+### 3. 事件去重加强（`prep_final.event_dedup`，需显式 `--event-dedup`）
+
+定时命令不带这个参数，默认保留各家媒体对同一事件的报道。下面的合并效果只在加上 `--event-dedup` 时出现。
+
+原判据只认「Jaccard≥0.5」或「共享≥2 个稀有词」，遇到**各家换主语**的同事件报道会漏合：
+`Zohran Mamdani Accuses Google...` / `Bernie Sanders Accuses Google...` 只共享 `{accuses, school}`，
+`school` 出现频次高、不算稀有，于是 10 条「Google 关闭学校搜索」全部保留。
+
+两项改进：
+
+1. **词形归一化**（`EV_SYN` + `_canon`）：`centre→center`、`15bn→15billion`、`schools→school`。
+   缺这层时，「data center expansion」与「data centre expansion」会被当成两个事件。
+2. **新增判据 4**：共享 ≥2 个实词且其中至少 1 个稀有 → 视为同事件。
+   配合 `EV_STOP`（已剔除品牌名、人名、高频虚动词）避免虚高相似度：
+   曾把「太空数据中心」「1000 亿无线通信」「进军印度」错并成一簇，就是 `Elon`/`Musk`/`wants` 计入共享所致。
+
+效果：本期 455 条原始 → 129 候选 → 120 curated → 87 条；「Google 关闭学校搜索」10 版→2 条、
+「Google 投资马来西亚 15 亿」5 版→1 条；马斯克 26→8 条。
+
+### 4. 误合并修复（同日追加）
+
+审出 2 处误删 —— 只因共享通用技术名词就被判为同事件：
+
+| 被误删 | 误并到 | 误判依据 |
+|---|---|---|
+| `TeraWulf gets credit backstop from Google for Anthropic data-center project` | `Google to invest $15bn in Malaysia's data center expansion` | 仅共享 `{data, center}` |
+| `Anthropic tweaks how Claude Code handles requests about making games` | `Top Anthropic product leader Cat Wu ... has left` | 仅共享 `{claude, code}` |
+
+**根因很反直觉**：`data`/`center` 这类通用词因为只出现在一小簇里，df 反而低，被当成「稀有词」；
+而 `school`/`search` 这些真正的事件词因为被反复报道，df 高、不被认作稀有。**判据取反了。**
+
+修法：
+1. 新增 `EV_GENERIC`（通用技术/商业名词白名单外的黑名单：data/center/model/code/cloud/chip/
+   platform/service/product/market/invest/billion/deal…），这些词即使低频也**不算有效稀有词**。
+2. 本公司产品名加入 `EV_STOP`（claude/chatgpt/gemini/copilot/grok/siri/codex），作用等同品牌名。
+3. 判据简化为三条：`Jaccard ≥ 0.5` 或 `有效稀有词 ≥ 2` 或 `共享 ≥ 2 且有效稀有词 ≥ 1`。
+
+效果：83 → **87 条**，救回上述 2 条独立新闻 + 2 条措辞差异较大的同事件稿
+（Oracle 腾讯交易的第 4 个版本、马来西亚投资的 2027/2028 表述）；学校政策仍保持合并，**未丢失任何原有条目**。

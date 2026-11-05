@@ -67,11 +67,18 @@ Detailed commands, environment setup, and the verification checklist are in
    their own brand when the title still matches it.
 5. **Product names roll up to their company.** ChatGPT/GPT → OpenAI, Claude → Anthropic,
    Kimi → 月之暗面/Moonshot, Gemini → Alphabet/Google. Do not open a separate section for a product.
-6. **One entry per event.** Dedup in order: URL, exact title, near-duplicate within the same
-   section + entity + media (Jaccard ≥ 0.5), then event-level (Jaccard ≥ 0.5, or at least two shared
-   rare tokens). `prep_final.py` keeps one representative per event (`--per-event`, default 1).
-7. **Two-line format**: `英文媒体：英文标题（超链接）` / `中文媒体：中文标题`. Chinese media name has no book brackets.
-8. **Glossary one-to-one**: media, brand, and leader names MUST come from《翻译知识库》. Leader H2 is
+6. **Keep every outlet's report.** Dedup drops the same URL, the same normalized title, and a near-duplicate
+   from the same outlet (Jaccard ≥ 0.5 within one section, entity, and media). Cross-outlet coverage of one
+   event stays. `prep_final.py` merges those only when called with `--event-dedup`. The scheduled command
+   does not pass that flag.
+7. **Title-only genre drops.** Promotions, Apple TV+ shows, pure stock moves, advertorials, lifestyle columns,
+   and listicles are judged on the headline. Bare `deal`, `sale`, or `discount` are not promo signals.
+   A pure politics headline drops unless it also carries a business signal (AI, chips, contracts, regulation,
+   earnings, products, Tesla, SpaceX).
+8. **`Moonshot` is case-sensitive.** Capital M is 月之暗面. Lowercase `moonshot` is a figure of speech and is dropped
+   unless the headline also names Kimi or the company. `match_in_text()` must see the original-case title.
+9. **Two-line format**: `英文媒体：英文标题（超链接）` / `中文媒体：中文标题`. Chinese media name has no book brackets.
+10. **Glossary one-to-one**: media, brand, and leader names MUST come from《翻译知识库》. Leader H2 is
    `中文名（英文名｜公司）`; English full leader names in the Chinese line are replaced by the KB Chinese name.
 
 ## Maintain the filter
@@ -89,8 +96,13 @@ Alias tables and exclusion rules live in `scripts/filter3.py`:
 - `is_broken_title()` rejects concatenated export titles (longer than 220 characters, or a repeated
   20/30/40-character prefix).
 - `APPLE_FOOD_PAT` against `APPLE_TECH_PAT` keeps recipe and orchard “apple” out of the Apple bucket.
+  `APPLE_MEDIA_PAT` drops Apple TV+ shows. `Big Apple` without a product name is New York, not Apple.
+- `TITLE_ONLY_RULES`, `PROMO_PAT`, and `STOCK_MOVE_PAT` run on the headline. A stock-move headline that also
+  names memory, margins, earnings, chips, or AI stays.
+- `POLITICS_PAT` drops election and partisan headlines that miss `BUSINESS_SIGNAL_PAT`.
 - Amazon stays only when the title hits a substantive signal (AWS, cloud, chip, agent, robot, Zoox,
   Anthropic, OpenAI, lawsuit). A bare `deal` is not enough, so “Kindle deal” drops.
+- `月之暗面/Moonshot` uses a case-sensitive alias. `Nikkei Asian Review` maps to `Nikkei Asia`.
 
 `scripts/curation.py` holds `PRIORITY`. Regulation, IPO, funding, earnings, and AI strategy score 2.
 Chip, China, employment, robotaxi, model updates, and exclusives score 1. An OpenAI or Anthropic IPO
