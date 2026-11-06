@@ -66,7 +66,7 @@
 | 54 | Amazon 的「AI model」标题被剔 | `AMAZON_KEEP` 里只有 `artificial intelligence` 没有裸 `ai`，`Amazon launches new AI model to rival OpenAI` 被判「亚马逊非AI」剔除 | `AMAZON_KEEP` 补 `\bai\b`。注意：`Alexa` 相关仍会被 EXCL 的「智能音箱」规则挡住，若需保留 Alexa AI 战略稿需单独调整该规则 |
 
 | 55 | 入华 Apple Intelligence 稿被挪到阿里 | `Apple Intelligence launches in China with Alibaba's Qwen model` 按「国内企业优先」整条进了「国内企业/阿里巴巴」，Apple 板块看不到最关键的入华动态 | focus 稿改按**标题最早出现实体**归位；`curation.unique_placement` 与 `prep_final` 的归属唯一化**两处都要加同一分支**，否则第二次归位会覆盖第一次 |
-| 56 | focus 加权在飞书文档里看不见 | curation 已给 Apple Intelligence 加 pscore，但飞书发布脚本按 `impact` 重排，不读 `focus` | 定时任务不要改发布脚本。核对 focus 看 `final.json` 的 `focus` 字段，以及入华稿有没有留在标题里最先出现的品牌下 |
+| 56 | focus 加权曾在飞书文档里看不见 | 旧发布脚本按 `impact` 重排，不读 `focus`，入华稿被高影响力的融资稿压在后面 | 发布脚本现在按事件簇排序，并把 `apple_intel_cn`、`apple_intel` 整段抬到该品牌前面。核对时看该品牌开头，以及 `final.json` 的 `focus` |
 | 57 | 裸 `chinese` 误判为入华 | `Apple Intelligence in Chinese language`（全球语言版）被当成中国市场落地，凭空升高优先级 | `APPLE_CN_PAT` 不用裸 `chinese`，要求 `chinese market/users/regulators/...`；语言类词（language/version/typing）明确排除 |
 
 | 58 | 领导人实体吞掉品牌稿 | `aliases_of` 把 `Dara Khosrowshahi (Uber)` 括号里的 `Uber` 也当成别名，所有 Uber 标题都命中该领导人；再叠加「同位置取 min」依赖 set 遍历顺序，**同一批数据两次运行归属可能不同**（实测 9 条 Uber 稿挂到人名下） | 括号是领导人标记（三个品牌表均无括号），括号内公司名不作为别名；并列位置改为 `(位置, 品牌优先, 实体名)` 确定性排序。草稿版 curation 与 prep_final 各有一份 `aliases_of`，两处都要改 |

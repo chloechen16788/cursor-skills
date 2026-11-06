@@ -60,7 +60,7 @@ Detailed commands and the verification checklist are in `references/workflow.md`
    even when the filing country is Singapore, Canada, or Australia. Resolve media before country.
 2. **Press Releases excluded** — detect PR wires (PRNewswire, GlobeNewswire, Business Wire, EINPresswire,
    Newsfile, Cision, `press release`) in title/author/excerpt.
-3. **Four section names stay.** The Feishu doc still prints 国内企业, 自动驾驶, 海外企业, 企业领导人.
+3. **Four `section` field names stay** (`国内企业`, `自动驾驶`, `海外企业`, `企业领导人`). The Feishu doc prints three headings: 一、国内竞品（含领导人）、二、自动驾驶竞品（含领导人）、三、海外竞品（含领导人）. An empty section, including 企业领导人 when every leader sits under a brand, is omitted.
    **No per-brand cap.** `CAP` values are `None`.
    Leaders with a known company are filed under that brand (`leader_placement`): 马云 → 阿里巴巴,
    Sundar Pichai → Alphabet/Google, Dara Khosrowshahi → Uber. Do not move them back into 企业领导人.
@@ -89,8 +89,8 @@ Detailed commands and the verification checklist are in `references/workflow.md`
 9. **Apple Intelligence is the client's top focus.** `apple_intel_cn` (+4) needs Apple Intelligence / Siri / Apple AI
    plus a China signal. Bare `chinese` is a language rollout, not 入华. `apple_intel` (+2) is other Apple
    Intelligence news, including reviews and how-tos. The score does not decide inclusion. The Feishu publisher
-   re-sorts by `impact` and does not read `focus`; check the field on `final.json`.
-10. **Two-line format**: `英文媒体：英文标题（超链接）` / `中文媒体：中文标题`. Chinese media name has no book brackets.
+   lifts `apple_intel_cn`, then `apple_intel`, to the front of that brand and keeps same-event headlines together.
+10. **Two-line format in the Feishu doc**: the English line is one bold link, `媒体: 标题`, with an ASCII colon and space. The Chinese line is one bold run, `中文媒体：中文标题`, fullwidth colon, no link. Chinese media name has no book brackets. Same-event headlines sit together. Apple Intelligence, 入华 first, is lifted to the top of that brand. The Feishu publisher does this; do not reorder the doc by hand.
 11. **Glossary one-to-one**: media, brand, and leader names MUST come from《翻译知识库》. A Chinese name in the
     KB does not by itself make a brand trackable; add the alias in `filter3.py` as well. Leader names that
     remain in 企业领导人 use H2 `中文名（英文名｜公司）`. English full leader names in the Chinese line are

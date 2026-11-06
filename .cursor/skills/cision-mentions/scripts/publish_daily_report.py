@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把四栏目两行日报写入固定飞书文档，再把日期和链接发到固定群。
+"""把日报写入固定飞书文档，再把日期和链接发到固定群。
 
 先在内存里组好正文，再清空文档子块并重写。不删除 wiki 节点。
 群只走 feishu_push.send_text，不能改到别的会话。消息不含标题和正文。
@@ -28,9 +28,9 @@ DEFAULT_KB = (
     / "翻译知识库.xlsx"
 )
 SECTION_TITLE = {
-    "国内企业": "一、国内企业（含领导人）",
-    "自动驾驶": "二、自动驾驶（含领导人）",
-    "海外企业": "三、海外竞品企业",
+    "国内企业": "一、国内竞品（含领导人）",
+    "自动驾驶": "二、自动驾驶竞品（含领导人）",
+    "海外企业": "三、海外竞品（含领导人）",
     "企业领导人": "四、海外竞品领导人",
 }
 SECTIONS = ["国内企业", "自动驾驶", "海外企业", "企业领导人"]
@@ -216,6 +216,97 @@ def _leader_heading(ent: str, leader_cn: dict[str, str]) -> str:
     return f"{chinese}（{name}｜{comp_cn}）" if comp else f"{chinese}（{name}）"
 
 
+# 品牌内排序与样例文档一致：先按标题把同一事件靠在一起，再把 Apple Intelligence
+# （入华优先）整段抬到该品牌前面。没有 focus 的品牌，顺序仍按事件簇的最高影响力。
+_EVENT_OVERLAP = 0.5
+_EVENT_CAP = 0.55
+_EV_GROUP_STOP = {
+    "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "has", "have",
+    "will", "its", "his", "her", "not", "but", "you", "can", "how", "why", "what", "who", "out",
+    "new", "more", "says", "said", "into", "over", "after", "amid", "about", "than", "then",
+    "they", "their", "inc", "nasdaq", "nyse", "stock", "stocks", "shares", "report", "reports",
+    "now", "just", "still", "first", "could", "would", "may", "might", "one", "two", "three",
+    "is", "be", "to", "of", "in", "on", "at", "as", "by", "or", "an", "a",
+}
+_FOCUS_RANK = {"apple_intel_cn": 0, "apple_intel": 1}
+_FOCUS_NORMAL = 2
+
+
+def _ev_tokens(title: str) -> set[str]:
+    return {
+        word
+        for word in re.findall(r"[a-z0-9]+", title.lower())
+        if len(word) >= 3 and word not in _EV_GROUP_STOP
+    }
+
+
+def _discover_events(items: list[dict]) -> list[list[dict]]:
+    """同一品牌下，措辞不同但讲同一件事的标题排在一起。"""
+    count = len(items)
+    if count <= 1:
+        return [list(items)] if items else []
+    by_word: dict[str, set[int]] = defaultdict(set)
+    for index, item in enumerate(items):
+        for word in _ev_tokens(str(item.get("title") or "")):
+            by_word[word].add(index)
+    upper = max(2, int(count * 0.8))
+    cap = max(3, int(count * _EVENT_CAP))
+    candidates = {word: hits for word, hits in by_word.items() if 2 <= len(hits) <= upper}
+    clusters: list[dict[str, set[int]]] = []
+    for word in sorted(candidates, key=lambda item: (-len(candidates[item]), item)):
+        titles = candidates[word]
+        target = None
+        for cluster in clusters:
+            overlap = len(titles & cluster["titles"])
+            if overlap and overlap / min(len(titles), len(cluster["titles"])) >= _EVENT_OVERLAP:
+                if len(cluster["titles"] | titles) <= cap:
+                    target = cluster
+                    break
+        if target is not None:
+            target["titles"] |= titles
+            continue
+        absorbed = False
+        for cluster in clusters:
+            overlap = len(titles & cluster["titles"])
+            if overlap and overlap / min(len(titles), len(cluster["titles"])) >= _EVENT_OVERLAP:
+                absorbed = True
+                break
+        if not absorbed:
+            clusters.append({"titles": set(titles)})
+    assigned: set[int] = set()
+    grouped: list[list[dict]] = []
+    for cluster in sorted(clusters, key=lambda item: -len(item["titles"])):
+        fresh = cluster["titles"] - assigned
+        if len(fresh) >= 2:
+            grouped.append([items[index] for index in sorted(fresh)])
+            assigned |= fresh
+    for index in range(count):
+        if index not in assigned:
+            grouped.append([items[index]])
+
+    def focus_rank(cluster: list[dict]) -> int:
+        return min(_FOCUS_RANK.get(str(item.get("focus") or ""), _FOCUS_NORMAL) for item in cluster)
+
+    grouped.sort(key=lambda cluster: (focus_rank(cluster), -max(item["impact"] for item in cluster)))
+    for cluster in grouped:
+        cluster.sort(key=lambda item: (_FOCUS_RANK.get(str(item.get("focus") or ""), _FOCUS_NORMAL), -item["impact"]))
+    return grouped
+
+
+def _ordered_items(items: list[dict]) -> list[dict]:
+    """先聚事件，再按 focus 稳定分块，入华在前。"""
+    base: list[dict] = []
+    for cluster in _discover_events(items):
+        base.extend(cluster)
+    blocks: OrderedDict[str, list[dict]] = OrderedDict()
+    for item in base:
+        blocks.setdefault(str(item.get("focus") or ""), []).append(item)
+    ordered: list[dict] = []
+    for key in sorted(blocks, key=lambda name: _FOCUS_RANK.get(name, _FOCUS_NORMAL)):
+        ordered.extend(blocks[key])
+    return ordered
+
+
 def build_blocks(
     final: list[dict],
     zh: dict[int, str],
@@ -225,6 +316,7 @@ def build_blocks(
     data_date: str,
     raw_count: int,
 ) -> tuple[list[dict], dict[str, int]]:
+    del data_date  # 日期只出现在群消息里，样例文档正文不写数据日期
     missing = sorted({item["media_kb"] for item in final if item.get("media_kb") not in media_cn})
     if missing:
         raise RuntimeError("终稿媒体不在翻译知识库中，未改文档：" + ", ".join(missing))
@@ -233,11 +325,8 @@ def build_blocks(
         groups[item["section"]][item["entity"]].append(item)
     raw_label = str(raw_count) if raw_count else "—"
     blocks = [
-        _heading(1, "百度海外舆情日报 · 竞品与领导人"),
         _text_block([
-            _text_run(
-                f"数据日期 {data_date}。原始记录 {raw_label} 条，筛选入报告 {len(final)} 条（同一报道仅归入一个板块）"
-            )
+            _text_run(f"原始记录 {raw_label} 条，筛选入报告 {len(final)} 条（同一报道仅归入一个板块）")
         ]),
         _text_block([
             _text_run("筛选说明：", bold=True),
@@ -245,31 +334,28 @@ def build_blocks(
                 "仅保留重点市场（中国、美国、英国、中东等）报道，且本期仅收录英文稿件；媒体来源限定于《翻译知识库》「媒体名称知识库」所列媒体，其余来源不收录。"
                 "已剔除 Windows/安卓补丁、手机/电脑硬件、医药/音箱、纯电商物流、非重点市场（法/意/德/日/新等）、低价值通稿与分析师评级类内容；"
                 "亦剔除加密货币、财报前瞻（实际业绩保留）、纯股价波动快讯，以及星链/SpaceX/推特、电动车换代、外卖等非重点话题。"
-                "同事件多媒体报道已就近归并；相同品牌内容归集于该品牌下；同一报道仅归入一个板块。标题中文译法为人工校对，供参考。"
             ),
         ]),
     ]
     counts = {sec: 0 for sec in SECTIONS}
     for sec in SECTIONS:
-        blocks.append(_heading(2, SECTION_TITLE[sec]))
+        if not groups[sec]:
+            continue
+        blocks.append(_heading(1, SECTION_TITLE[sec]))
         entities = sorted(groups[sec].items(), key=lambda pair: -max(item["impact"] for item in pair[1]))
         for ent, items in entities:
             heading = _leader_heading(ent, leader_cn) if sec == "企业领导人" else ent
-            blocks.append(_heading(3, heading))
-            events: dict[str, list[dict]] = defaultdict(list)
-            for item in items:
-                key = re.sub(r"[^a-z0-9]+", "", str(item["title"]).lower())
-                events[key].append(item)
-            for group in sorted(events.values(), key=lambda rows: -max(item["impact"] for item in rows)):
-                for item in sorted(group, key=lambda row: -row["impact"]):
-                    blocks.append(_text_block([
-                        _text_run(str(item["media_kb"]) + "：", bold=True),
-                        _text_run(str(item["title"]).strip(), url=str(item["url"])),
-                    ]))
-                    blocks.append(_text_block([
-                        _text_run(_media_cn(str(item["media_kb"]), media_cn) + "：" + zh[item["idx"]]),
-                    ]))
-                    counts[sec] += 1
+            blocks.append(_heading(2, heading))
+            for item in _ordered_items(items):
+                media = str(item["media_kb"])
+                title = str(item["title"]).strip()
+                blocks.append(_text_block([
+                    _text_run(f"{media}: {title}", bold=True, url=str(item["url"])),
+                ]))
+                blocks.append(_text_block([
+                    _text_run(_media_cn(media, media_cn) + "：" + zh[item["idx"]], bold=True),
+                ]))
+                counts[sec] += 1
     return blocks, counts
 
 
