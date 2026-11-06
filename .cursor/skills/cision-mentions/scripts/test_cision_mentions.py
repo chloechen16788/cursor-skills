@@ -21,16 +21,25 @@ def page(header: str, *rows: str) -> str:
 
 class CisionMentionsTest(unittest.TestCase):
     def test_afternoon_window_matches_documented_instants(self) -> None:
-        now = datetime(2026, 10, 26, 15, 0, tzinfo=SHANGHAI)
+        now = datetime(2026, 10, 27, 15, 0, tzinfo=SHANGHAI)
         after, before = cision_lib.shanghai_window(now)
-        self.assertEqual(after, "2026-10-24T23:00:00.000Z")
-        self.assertEqual(before, "2026-10-25T23:00:00.000Z")
+        self.assertEqual(after, "2026-10-25T23:00:00.000Z")
+        self.assertEqual(before, "2026-10-26T23:00:00.000Z")
 
     def test_early_morning_still_uses_calendar_day(self) -> None:
-        now = datetime(2026, 10, 26, 3, 0, tzinfo=SHANGHAI)
+        now = datetime(2026, 10, 27, 3, 0, tzinfo=SHANGHAI)
         after, before = cision_lib.shanghai_window(now)
-        self.assertEqual(after, "2026-10-24T23:00:00.000Z")
-        self.assertEqual(before, "2026-10-25T23:00:00.000Z")
+        self.assertEqual(after, "2026-10-25T23:00:00.000Z")
+        self.assertEqual(before, "2026-10-26T23:00:00.000Z")
+
+    def test_monday_window_starts_on_friday(self) -> None:
+        afternoon = datetime(2026, 10, 26, 15, 0, tzinfo=SHANGHAI)
+        early = datetime(2026, 10, 26, 3, 0, tzinfo=SHANGHAI)
+        self.assertEqual(
+            cision_lib.shanghai_window(afternoon),
+            ("2026-10-22T23:00:00.000Z", "2026-10-25T23:00:00.000Z"),
+        )
+        self.assertEqual(cision_lib.shanghai_window(early), cision_lib.shanghai_window(afternoon))
 
     def test_query_percent_encodes_brackets(self) -> None:
         query = cision_lib.mentions_query("2026-10-24T23:00:00.000Z", "2026-10-25T23:00:00.000Z", 1, 4999)
@@ -195,8 +204,8 @@ class CisionMentionsTest(unittest.TestCase):
         self.assertNotIn("--wiki", export_source)
         self.assertNotIn("--table", export_source)
         skill = (scripts.parent / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("`0 23 * * *`", skill)
-        self.assertIn("`30 10 * * *`", skill)
+        self.assertIn("`0 23 * * 0-4`", skill)
+        self.assertNotIn("`30 10 * * *`", skill)
         self.assertNotIn("07:05", skill)
         self.assertNotIn("5 23", skill)
         self.assertIn('"PATCH"', push_source)
