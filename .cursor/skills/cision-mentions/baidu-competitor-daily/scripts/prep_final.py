@@ -8,13 +8,28 @@ from collections import defaultdict, OrderedDict
 
 
 def aliases_of(sec, ent):
-    if sec == '企业领导人':
-        name = ent.split('(')[0].strip()
-        return [name.lower()] if re.search(r'[A-Za-z]', name) else []
+    """实体名 → 用于标题匹配的别名（小写）。
+
+    领导人实体的格式是「人名 (所属公司)」或「中文名/英文名 (公司)」：
+    括号内是**公司归属标注，不是别名**。早先按 '/' 和括号整体切分，会把
+    `Dara Khosrowshahi (Uber)` 里的 `Uber` 也变成别名，于是所有 Uber 标题都命中该领导人，
+    再叠加「同位置取 min」的不稳定排序，Uber 的稿子会随机挂到人名下（实测 9 条）。
+    括号只出现在领导人实体上（三个品牌表均无括号），故用括号作为领导人标记是安全的。
+    """
+    if '(' in ent or '（' in ent:
+        # 只取括号前的人名部分
+        head = re.split(r'[(（]', ent)[0]
+        names = []
+        for p in re.split(r'[/]', head):
+            p = p.strip()
+            if p and re.search(r'[A-Za-z]', p):
+                names.append(p.lower())
+        # 中文名（如「韩旭/Tony Han」中的韩旭）无需转小写匹配，交由 match_in_text 侧处理
+        return names
     if ent == 'Cruise':
         return []  # 避免 "Tom Cruise" 等被误归并到 Cruise
     outs = []
-    for p in re.split(r'[/((（）)]', ent):
+    for p in re.split(r'[/(（（）)]', ent):
         p = p.strip()
         if p and re.search(r'[A-Za-z]', p):
             outs.append(p.lower())
@@ -165,10 +180,17 @@ def main():
         hits = title_hits(x['title'].lower())
         if not hits:
             continue
+        # 客户重点关注的 Apple Intelligence 稿：按标题中最早出现的实体归位。
+        # 必须与 curation.unique_placement 的 focus 分支保持一致——否则这里的
+        # 「领导人优先」会把 "Apple's Siri AI Could Become a Paid…CEO John Ternus"
+        # 挪回领导人所属品牌，Apple 板块就看不到这条 AI 动态。
+        if x.get('focus'):
+            pick = min(hits, key=lambda h: h[0])
+            x['section'], x['entity'] = pick[1], pick[2]
+            continue
         if x['section'] in ('国内企业', '自动驾驶'):
             continue  # 全面收录板块：标题仍命中本板块品牌则不迁移
-        leads = [h for h in hits if h[1] == '企业领导人']
-        pick = min(leads or hits, key=lambda h: h[0])
+        pick = min(hits, key=lambda h: (h[0], h[1], h[2]))
         x['section'], x['entity'] = pick[1], pick[2]
 
     # 2) 全局 URL 去重
@@ -244,9 +266,18 @@ def main():
             ev = defaultdict(list)
             for it in items:
                 ev[norm_title(it['title'])].append(it)
-            event_groups = sorted(ev.values(), key=lambda g: (-max(i.get('pscore', 0) for i in g), -max(i['impact'] for i in g)))
+            # 客户重点关注（focus）优先，再按优先级分数、影响力。
+            # 入华 0 / 其他 Apple Intelligence 1 / 普通 2。飞书发布脚本会按 impact 重排，这里的顺序留在 final.json。
+            def _frank(it):
+                return {'apple_intel_cn': 0, 'apple_intel': 1}.get(it.get('focus', ''), 2)
+
+            event_groups = sorted(
+                ev.values(),
+                key=lambda g: (min(_frank(i) for i in g),
+                               -max(i.get('pscore', 0) for i in g),
+                               -max(i['impact'] for i in g)))
             for g in event_groups:
-                g.sort(key=lambda i: (-i.get('pscore', 0), -i['impact']))
+                g.sort(key=lambda i: (_frank(i), -i.get('pscore', 0), -i['impact']))
                 for it in g:
                     ordered.append(it)
 
