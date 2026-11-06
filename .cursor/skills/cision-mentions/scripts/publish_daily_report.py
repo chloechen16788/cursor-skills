@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""把日报写入固定飞书文档，再把日期和链接发到固定群。
+"""把日报写入固定飞书文档，再生成 Word，把日期、链接和 Word 发到固定群。
 
 先在内存里组好正文，再清空文档子块并重写。不删除 wiki 节点。
-群只走 feishu_push.send_text，不能改到别的会话。消息不含标题和正文。
+Word 由 baidu-competitor-daily/scripts/build_doc.py 生成，排序规则在那个脚本里。
+群只走 feishu_push，不能改到别的会话。文本消息不含标题和正文。
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
@@ -21,12 +23,9 @@ import feishu_push
 
 REPORT_WIKI_TOKEN = "PP88weeBdi1Pcgkmpxbc48lSn5e"
 REPORT_WIKI_URL = "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e"
-DEFAULT_KB = (
-    Path(__file__).resolve().parent.parent
-    / "baidu-competitor-daily"
-    / "assets"
-    / "翻译知识库.xlsx"
-)
+SKILL_ROOT = Path(__file__).resolve().parent.parent / "baidu-competitor-daily"
+DEFAULT_KB = SKILL_ROOT / "assets" / "翻译知识库.xlsx"
+BUILD_DOC = SKILL_ROOT / "scripts" / "build_doc.py"
 SECTION_TITLE = {
     "国内企业": "一、国内竞品（含领导人）",
     "自动驾驶": "二、自动驾驶竞品（含领导人）",
@@ -429,6 +428,35 @@ def write_blocks(token: str, doc_id: str, blocks: list[dict]) -> int:
     return written
 
 
+def write_word(final_path: Path, zh_path: Path, kb_path: Path, *, data_date: str, raw_count: int) -> Path:
+    """用第五版 build_doc.py 生成 Word。失败时还没发群消息。"""
+    if not BUILD_DOC.is_file():
+        raise RuntimeError(f"找不到 build_doc.py，未发群消息：{BUILD_DOC}")
+    out = final_path.resolve().parent / f"百度海外舆情日报_竞品与领导人_{data_date}.docx"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(BUILD_DOC),
+            "--final",
+            str(final_path),
+            "--zh",
+            str(zh_path),
+            "--kb",
+            str(kb_path),
+            "--raw-count",
+            str(raw_count),
+            "--out",
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0 or not out.is_file():
+        detail = (completed.stderr or completed.stdout or "无输出").strip()
+        raise RuntimeError(f"文档已重写，Word 未生成，未发群消息：{detail}")
+    return out
+
+
 def publish(*, final_path: Path, zh_path: Path, kb_path: Path, after: str, raw_count: int, send) -> dict:
     data_date = data_date_from_after(after)
     final, zh, media_cn, leader_cn = prepare(final_path, zh_path, kb_path)
@@ -445,18 +473,27 @@ def publish(*, final_path: Path, zh_path: Path, kb_path: Path, after: str, raw_c
     written = write_blocks(token, doc_id, blocks)
     if len(list_children(token, doc_id)) != written:
         raise RuntimeError("写入后的子块数与预期不符，未发群消息")
+    docx_path = write_word(
+        final_path, zh_path, kb_path, data_date=data_date, raw_count=raw_count
+    )
     notice = report_notice(data_date, counts)
     try:
         send(notice)
     except Exception as error:  # noqa: BLE001
         detail = feishu_push.redact_secrets(str(error))
         raise RuntimeError(f"文档已重写，群消息发送失败：{detail}") from None
+    try:
+        feishu_push.send_file(docx_path)
+    except Exception as error:  # noqa: BLE001
+        detail = feishu_push.redact_secrets(str(error))
+        raise RuntimeError(f"文档已重写，说明已发送，Word 发送失败：{detail}") from None
     return {
         "data_date": data_date,
         "cleared_children": cleared,
         "written_blocks": written,
         "counts": counts,
         "wiki_url": REPORT_WIKI_URL,
+        "docx": str(docx_path),
         "feishu": "sent",
     }
 
@@ -473,13 +510,14 @@ def format_summary(summary: dict) -> str:
             f"cleared_children={summary['cleared_children']}",
             f"written_blocks={summary['written_blocks']}",
             f"wiki_url={summary['wiki_url']}",
+            f"docx={summary['docx']}",
             f"feishu={summary['feishu']}",
         ]
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="清空并重写固定飞书日报文档，再把日期和链接发到固定群")
+    parser = argparse.ArgumentParser(description="清空并重写固定飞书日报文档，生成 Word，再把日期、链接和 Word 发到固定群")
     parser.add_argument("--final", required=True, help="prep_final.py 写出的 final.json")
     parser.add_argument("--zh", required=True, help="按 idx 填好的 zh.json")
     parser.add_argument("--kb", default=str(DEFAULT_KB), help="翻译知识库.xlsx，默认用技能里的那份")

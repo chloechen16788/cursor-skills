@@ -1,11 +1,11 @@
 # 运行工作流（百度竞品同业日报）
 
-本文件描述筛选到翻译的步骤。筛选脚本位于 `scripts/`，需 `openpyxl`。定时运行的最后一步不是 Word，而是上一级 `scripts/publish_daily_report.py`：清空并重写固定飞书文档，再把上海数据日期和 wiki 链接发到固定群。
+本文件描述筛选到翻译的步骤。筛选脚本位于 `scripts/`，需 `openpyxl`。生成 Word 还需 `python-docx`。定时运行的最后一步是上一级 `scripts/publish_daily_report.py`：清空并重写固定飞书文档，用 `build_doc.py` 生成 Word，再把上海数据日期、wiki 链接和 Word 发到固定群。
 
 ## 0. 环境准备
 
 ```bash
-pip install openpyxl
+pip install openpyxl python-docx
 ```
 
 ## 1. 输入与产物概览
@@ -17,7 +17,7 @@ delta-bodies.xlsx  ──┐
 candidates.json + delta-bodies.xlsx ──> curation.py ──> curated.json
 curated.json ──> prep_final.py ──> final.json
 final.json ──> make_zh_template.py ──> zh_template.json
-zh_template.json +（按标题填写 zh.json）+ 翻译知识库.xlsx ──> publish_daily_report.py ──> 飞书文档 + 群链接
+zh_template.json +（按标题填写 zh.json）+ 翻译知识库.xlsx ──> publish_daily_report.py ──> 飞书文档 + Word + 群消息
 ```
 
 - 定时运行的原始数据是 `delta-bodies.xlsx`（工作表名 `delta`，字段含 title/source/url/locationCountry/languageCode/keywords/impactScore/excerpt/author/content/publishedAt）。
@@ -81,7 +81,7 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
   --after "<导出摘要里的 after>" \
   --raw-count <delta_rows>
 ```
-脚本先清空固定 wiki 文档的正文，再写入两行式日报，最后只把数据日期和 wiki 链接发到固定群。不要另存 Word 当作成品。`--after` 与 `--raw-count` 仍必传。
+脚本先清空固定 wiki 文档的正文，再写入两行式日报，然后调用 `scripts/build_doc.py` 生成 Word，最后把数据日期、wiki 链接和这个 Word 发到固定群。不要把 Word 发到别的会话。`--after` 与 `--raw-count` 仍必传。展示顺序用第五版的 `discover_events` 和 focus 稳定分块。
 
 ## 3. 收尾自检清单
 
@@ -95,7 +95,7 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
 - [ ] 无标题粘连条目。
 - [ ] 中文行无残留英文领导人全名（如 `Satya Nadella` 已替换为 `萨提亚·纳德拉`）。
 - [ ] 若「企业领导人」仍有无法归入品牌的人名，H2 为「中文名（英文名｜公司）」。已归入品牌的领导人不再单独成节。
-- [ ] Apple Intelligence 入华稿的 `focus` 为 `apple_intel_cn`，并落在标题里最先出现的品牌下。飞书里的先后仍按影响力，不按这个权重。
+- [ ] Apple Intelligence 入华稿的 `focus` 为 `apple_intel_cn`，并落在标题里最先出现的品牌下。飞书和 Word 里，入华稿在该品牌最前，同事件的报道相邻。
 - [ ] 抽查几条：是竞品情报，而不是股评、消费评测或生活杂讯。
 
 ## 4. 知识库维护

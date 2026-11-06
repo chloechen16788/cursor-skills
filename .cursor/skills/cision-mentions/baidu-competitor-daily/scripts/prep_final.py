@@ -266,8 +266,10 @@ def main():
             ev = defaultdict(list)
             for it in items:
                 ev[norm_title(it['title'])].append(it)
-            # 客户重点关注（focus）优先，再按优先级分数、影响力。
-            # 入华 0 / 其他 Apple Intelligence 1 / 普通 2。飞书发布脚本会按 impact 重排，这里的顺序留在 final.json。
+            # 与第五版一致：同一规范化标题先归并。簇间、簇内都是 focus、pscore、impact。
+            # 入华 0 / 其他 Apple Intelligence 1 / 普通 2。
+            # 措辞不同的同事件相邻不在这里做，由 build_doc.discover_events 对全量标题聚类，
+            # 再按 focus 稳定分块。不要把 pscore 放进那一层的簇排序键。
             def _frank(it):
                 return {'apple_intel_cn': 0, 'apple_intel': 1}.get(it.get('focus', ''), 2)
 
