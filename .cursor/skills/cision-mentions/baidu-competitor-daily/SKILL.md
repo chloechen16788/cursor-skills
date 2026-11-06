@@ -145,6 +145,15 @@ All scripts take explicit `--input` / `--kb` / `--out` arguments. Commands and t
     even when `BUSINESS_SIGNAL_PAT` matches. Otherwise "Musk fires back at Democrats over AI regulation after
     midterm rout" survives on the word `AI`. The pattern deliberately excludes bare `after the midterm`, so
     "Why Shares of Tesla, SpaceX Are Sliding After the Midterm Elections" stays.
+    These cases stay anyway:
+    - **An institution action aimed at a known brand** is intelligence, not an election comment.
+      `INSTITUTION_ACTION_PAT` (asked to brief, seek a briefing, testify, subpoena, congressional or senate
+      hearing, appear before lawmakers) exempts the pure-politics drop when the headline also names a tracked
+      brand. Otherwise "Nvidia's Huang is asked to brief Congress on reported Chinese spy relationship" dies
+      on the word `Congress`. "Texas Turns Blue" and "Musk spent $445M to help Republicans" still drop.
+    - `campaign` needs a word boundary (`campaigns?\b`). Bare `campaign` matched `campaigners` and dropped
+      "Google refused 54K-name petition, say campaigners".
+    - A `china_tech` headline (rule 18) is also exempt from `STRONG_POLITICS_PAT`.
 16. **Two-line format, two outputs.**
     Feishu: the English line is one bold link, `媒体: 标题`, ASCII colon and space. The Chinese line is one bold
     run, `中文媒体：中文标题`, fullwidth colon, no link. Chinese media names have no book brackets.
@@ -155,23 +164,44 @@ All scripts take explicit `--input` / `--kb` / `--out` arguments. Commands and t
     KB does not by itself make a brand trackable; add the alias in `filter3.py` as well. Leader entities that
     remain in 企业领导人 use `中文名（英文名｜公司）`. English full leader names in the Chinese line are
     replaced by the KB Chinese name.
+18. **China-related tech coverage of every tracked brand is mandatory.** A headline that has a China signal
+    (`China` / `Chinese` / `Beijing` / `PRC` / `mainland` / Hong Kong / Taiwan / Shanghai / Shenzhen / Hangzhou,
+    `CAC` / 网信办 / 工信部 / 商务部, `rare earth`, or a Chinese company name — Huawei, BYD, SMIC, YMTC, CXMT,
+    Alibaba, Tencent, ByteDance, Xiaomi, Baidu, DeepSeek, Moonshot, Qwen, Zhipu, MiniMax, SenseTime, Innolight,
+    MetaX, Moore Threads, Iluvatar — so "Oracle scraps deal to lease chips to Tencent" counts without the word
+    China) **and** a tech-topic signal (chips, semiconductor, foundry, HBM, DRAM, GPU, AI, LLM, model, agent,
+    autonomous, self-driving, robotaxi, FSD, regulation, export control, entity list, antitrust, tariff,
+    Congress, hearing) is `china_tech` (`filter3.china_tech_focus`, title only) and must be kept:
+    - It is exempt from every per-brand topic gate: Tesla EV/sales, Amazon non-AI, Musk non-priority,
+      Uber/Lyft delivery, and overseas earnings previews. Crypto stays excluded even with a China signal.
+    - It is exempt from the strong-politics drop. US-China tech regulation is the intelligence.
+    - `curation.priority_score` adds **+2** (`FOCUS_CN_TECH`) onto `pscore` only. It does **not** write `focus`.
+      Feishu and Word still order a brand by Apple Intelligence `focus`, then event-cluster impact. Do not add
+      a China-tech `focus` in this pass; the external pack does not set one either. The two pattern sets are
+      duplicated in `filter3.py` and `curation.py`. Edit both, or inclusion and the score silently disagree.
+    The Word and Feishu filter notes say these items are shown first inside the brand. That sentence matches
+    the external pack. The current sort does not move them there.
 
 ## Maintain the filter
 
 Alias tables and exclusion rules live in `scripts/filter3.py`:
-`DOMESTIC_BRANDS` (41), `DOMESTIC_LEADERS` (14), `AUTO_BRANDS` (12), `AUTO_LEADERS` (10),
+`DOMESTIC_BRANDS` (42, including 云徙科技/Yunxi Technology), `DOMESTIC_LEADERS` (14), `AUTO_BRANDS` (12), `AUTO_LEADERS` (10),
 `OVERSEAS_BRANDS` (13), `OVERSEAS_LEADERS` (15), `LEADER_PARENT`, `LEADER_PARENT_ALIAS`,
 plus `EXCL`, `PR_PAT`, and the per-brand regexes in `topic_gate()`.
 
 **A Chinese name in the KB does not make a brand trackable.** `placed()` searches the alias tables.
-A company that exists only in `品牌名称翻译知识库` is silently discarded. Add it to both, then verify a real headline lands.
+A company that exists only in `品牌名称翻译知识库` is silently discarded. At startup, `filter3.py` prints a
+`WARNING` listing every KB brand with no alias. That is how 云徙科技/Yunxi Technology was found missing.
+`Cruise` and the category rows `Robotaxi` and `Cybercab` are expected in that list and are skipped.
+Add a new competitor to both the KB and the alias table, then verify a real headline lands.
 Domestic chip, memory, and optics names sit together: 沐曦/MetaX, 摩尔线程/Moore Threads, 长鑫存储/CXMT,
 长江存储/YMTC, 天数智芯/Iluvatar, 壁仞科技/Biren, 中际旭创/Innolight. `Biren` collides with the given name
 Biren Singh, so its alias is case-sensitive and excludes that name.
 
 - `topic_gate()` is title-only. It covers Yahoo stock noise, Musk, Tesla, Uber/Lyft delivery, Amazon,
   earnings previews, and crypto. Earnings-preview drops apply to pure overseas competitors only.
-  Auto and domestic previews stay.
+  Auto and domestic previews stay. `china_tech_focus` exempts a headline from those brand gates.
+  Crypto is still dropped. Pass `--drops drops.json` to write every dropped row with its reason.
 - `cruise_hit(title)` — Cruise is not in `AUTO_BRANDS`. A headline is kept only when it contains
   `cruise`, an AV context (gm / robotaxi / self-driving / autonomous / driverless / waymo), and no
   travel or cinema signal (Tom Cruise, cruise ship, box office).
@@ -186,9 +216,10 @@ Biren Singh, so its alias is case-sensitive and excludes that name.
   Anthropic, OpenAI, lawsuit). A bare `deal` is not enough.
 - `Nikkei Asian Review` maps to `Nikkei Asia`.
 
-`scripts/curation.py` holds `PRIORITY` and `apple_focus()`. Regulation, IPO, funding, earnings, and AI
+`scripts/curation.py` holds `PRIORITY`, `apple_focus()`, and `china_tech_focus()`. Regulation, IPO, funding, earnings, and AI
 strategy score 2. Chip, China, employment, robotaxi, model updates, and exclusives score 1. An OpenAI
 or Anthropic IPO or funding hit adds 3. Apple Intelligence 入华 adds 4; other Apple Intelligence adds 2.
+China-related tech adds 2 to `pscore` and does not set `focus`.
 A leader viewpoint adds 1. **The score only orders items inside a brand. It never decides inclusion.**
 A score of 0 is not a noise signal. Parentheses in a leader entity are not aliases:
 `Dara Khosrowshahi (Uber)` must not make every Uber headline belong to that person.

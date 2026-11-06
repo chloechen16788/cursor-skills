@@ -4,7 +4,7 @@
 
 | 步骤 | 脚本 | 必保留参数 | 产物 |
 | --- | --- | --- | --- |
-| 1 | `filter3.py` | `--input` `--kb` `--out` | `candidates.json` |
+| 1 | `filter3.py` | `--input` `--kb` `--out`（`--drops` 可选，定时命令不传） | `candidates.json` |
 | 2 | `curation.py` | `--candidates` `--raw` `--out` | `curated.json` |
 | 3 | `prep_final.py` | `--input` `--out` | `final.json` |
 | 4 | `make_zh_template.py` | `--final` `--out` | `zh_template.json` |

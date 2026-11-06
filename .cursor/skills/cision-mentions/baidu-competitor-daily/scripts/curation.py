@@ -75,6 +75,33 @@ FOCUS_APPLE_CN = 4        # 入华相关：在既有权重之上再 +4
 FOCUS_APPLE_INTEL = 2     # 其他 Apple Intelligence 动态：再 +2
 
 
+# ===== 中国相关科技议题（必须收录 → 同品牌内优先排前）=====
+# 与 filter3.china_tech_focus 同一口径：标题同时命中「中国信号」与「科技议题」。
+# 口径改动必须两边同步，否则会出现「保留了却没排前」或反过来的隐性不一致。
+CN_SIGNAL_PAT = re.compile(
+    r'\bchina\b|\bchinese\b|\bbeijing\b|\bprc\b|\bmainland\b|\bhong kong\b|\btaiwan\b'
+    r'|\bshanghai\b|\bshenzhen\b|\bhangzhou\b'
+    r'|中国|中方|北京|上海|深圳|杭州|大陆|国行|香港|台湾'
+    r'|\bcac\b|cyberspace administration|工信部|网信办|商务部'
+    r'|rare earth|稀土'
+    r'|\bhuawei\b|\bbyd\b|\bsmic\b|\bymtc\b|\bcxmt\b|\balibaba\b|\btencent\b|\bbytedance\b'
+    r'|\bxiaomi\b|\bbaifu\b|\bbaidu\b|\bdeepseek\b|\bmoonshot\b|qwen|zhipu|minimax|sensetime'
+    r'|\binnolight\b|\bmetax\b|moore threads|iluvatar', re.I)
+CN_TECH_PAT = re.compile(
+    r'\bchip|chips|semiconductor|\bfab\b|foundry|\bwafer\b|\bhbm\b|\bdram\b|\bnand\b|gpu|accelerator'
+    r'|export control|export ban|entity list|\bblacklist\b|advanced node|lithography'
+    r'|\bai\b|artificial intelligence|generative|\bllm\b|large language model|\bagent\b|model'
+    r'|autonomous|self-driving|driverless|robotaxi|robotruck|\bfsd\b|\badas\b|smart driving'
+    r'|regulation|regulator|antitrust|probe|investigat|\bban\b|\bcurbs?\b|sanction|tariff'
+    r'|national security|data (?:security|localization|transfer)|\bdoj\b|\bftc\b|\bbis\b'
+    r'|congress|senate|white house|lawmakers|hearing|testify', re.I)
+FOCUS_CN_TECH = 2         # 中国相关科技议题：再 +2
+
+
+def china_tech_focus(title):
+    return bool(CN_SIGNAL_PAT.search(title) and CN_TECH_PAT.search(title))
+
+
 def apple_focus(title):
     """返回 'apple_intel_cn' / 'apple_intel' / ''。只看标题。"""
     if not APPLE_INTEL_PAT.search(title):
@@ -104,6 +131,11 @@ def priority_score(x, raw_by_url):
     elif focus == 'apple_intel':
         score += FOCUS_APPLE_INTEL
         hits.append('Apple Intelligence(重点)')
+    # 重点关注：中国相关科技议题（芯片/AI/自动驾驶/无人驾驶/Robotaxi/中美科技监管）
+    cn_tech = china_tech_focus(x['title'])
+    if cn_tech:
+        score += FOCUS_CN_TECH
+        hits.append('中国相关科技议题(重点)')
     # 重点关注：OpenAI / Anthropic 上市融资（额外加权）
     ovb = [e.lower() for e in x.get('ovb', [])]
     if ('openai' in ' '.join(ovb) or 'anthropic' in ' '.join(ovb)) and ('上市/IPO' in hits or '融资/funding' in hits):

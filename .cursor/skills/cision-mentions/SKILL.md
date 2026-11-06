@@ -214,7 +214,7 @@ python3 .cursor/skills/cision-mentions/baidu-competitor-daily/scripts/make_zh_te
 
 顺序和规则：
 
-1. `filter3.py`：只留英文，且媒体必须在《翻译知识库》。剔除新闻稿。四个栏目按 国内企业、自动驾驶、海外企业、企业领导人。
+1. `filter3.py`：只留英文，且媒体必须在《翻译知识库》。剔除新闻稿。四个栏目按 国内企业、自动驾驶、海外企业、企业领导人。标题同时有中国信号和芯片、AI、自动驾驶、Robotaxi 或中美科技监管时必须留下，并在 `curation.py` 里给 `pscore` 加 2，不写入 `focus`。国会针对已识别品牌的作证、简报、传唤、听证留下。定时命令不传 `--drops`。
 2. `curation.py`：先按标题做唯一归属。不设每品牌限额，`CAP` 全是 `None`。不要在脚本跑完后再把一个品牌裁到 5 条或 8 条。
 3. `prep_final.py`：再按标题定归属，并按 URL 去重。同一规范化标题归在一起，组内按 focus、pscore、impact 排。`idx` 是译文键。展示顺序由 `build_doc.py` 的 `discover_events` 决定：同事件相邻，Apple Intelligence 入华在该品牌最前。不要手写事件标签，也不要把 `pscore` 放进这一层的排序键。
 4. 只根据标题填写 `zh.json`，不要读正文，也不要打印正文。媒体、品牌、领导人译名与知识库一一对应。`len(zh) == len(final)`。

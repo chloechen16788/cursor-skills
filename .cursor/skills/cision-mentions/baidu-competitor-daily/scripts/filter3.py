@@ -41,6 +41,8 @@ DOMESTIC_BRANDS = {
     '壁仞科技/Biren': ['!(?<![A-Za-z])(?:Biren|BIREN)(?![A-Za-z])(?!\\s+Singh)', 'biren technology', '壁仞'],
     '中际旭创/Innolight': ['innolight', '中际旭创', 'zhongji innoclight'],
     'SHEIN/希音': ['shein', '希音'],
+    # 云徙科技：KB 里一直有译名，但代码表漏了，稿件此前被静默丢弃
+    '云徙科技/Yunxi Technology': ['yunxi technology', '云徙'],
     '拼多多/Pinduoduo': ['pinduoduo', '拼多多'], 'PDD': ['pdd'], 'Temu': ['temu'], '小米/Xiaomi': ['xiaomi', '小米'],
     '商汤科技/SenseTime': ['sensetime', '商汤'], '京东/JD.com': ['jd.com', 'jd ', '京东'], '美团/Meituan': ['meituan', '美团'],
     '奇虎360/Qihoo 360': ['qihoo', '360 ', '奇虎'],
@@ -413,13 +415,24 @@ POLITICS_PAT = re.compile(
     r'(midterm|mid-term|election day|election result|blue wave|red wave|\bvoters?\b|ballot|'
     r'poll(?:s|ing)?\b|gop|democrat|republican|senate race|primary race|trump|biden|'
     r'political fortune|spent \$|spending \$|spend \$|donor|pac\b|super pac|endors(?:e|ed|ement)|'
-    r'campaign|inaugurat|swing state|texas turns blue|vote red|lost the election|election bet|'
+    r'campaigns?\b|inaugurat|swing state|texas turns blue|vote red|lost the election|election bet|'
     r'\bdoge\b|lawyer up|persecut|political retribution|'
     r'midterms failure|political party|talarico|mamdani|sanders accuses|politics|\bsenate\b|\bcongress\b|campaign trail|re-election bid)', re.I)
 # 强政治判据：选举结果/党争攻防/政治报复类叙事，即使提到股价代码或 AI 监管，
 # 也不是产业情报——这些词本身就是「政治故事」的标记，故命中即剔，不被 BUSINESS_SIGNAL 豁免。
 # 注意不包含裸 `after the midterm`：那会误伤「选举后特斯拉股价为何下跌」这类市场影响稿，
 # 后者此前已确认保留。
+# 立法/监管机构的**实质动作**（要求作证、简报、传唤、听证）针对已识别的公司时，是监管与地缘政治议题，
+# 不是选举评论。典型误剔：「Nvidia's Huang is asked to brief Congress on reported Chinese spy relationship」——
+# 只因标题含 Congress 就被判「纯政治」。
+# 判据要求「机构动作 + 已命中品牌」，因此「Texas Turns Blue / 马斯克选举花费」这类仍会被正常剔除。
+INSTITUTION_ACTION_PAT = re.compile(
+    r'(?:asked|asked to|called on|urged|summoned?|invited)\s+to\s+(?:brief|testify|appear)'
+    r'|(?:seek|seeks|seeking|request(?:s|ed)?)\s+(?:a\s+)?briefing'
+    r'|(?:brief|briefing|testimony|testify)\s+(?:congress|lawmakers|senate|the senate|a senate)'
+    r'|\b(?:testif(?:y|ies)|subpoena\w*|congressional hearing|senate hearing|hearing before)\b'
+    r'|appear(?:s|ed)? before (?:congress|a senate|the senate|lawmakers)', re.I)
+
 STRONG_POLITICS_PAT = re.compile(
     r'midterm rout|persecut|governor-elect|election night|fires back at (?:democrats|republicans|critics)'
     r'|spent (?:at least )?\$[\d.,]+ million in|lawyer up|political retribution|\bdoge\b'
@@ -550,10 +563,11 @@ def is_broken_title(title):
     return False
 
 
-def exclusion_reason(text, source, is_overseas, title=None):
+def exclusion_reason(text, source, is_overseas, title=None, has_brand=False):
     """text = 标题+摘要（用于通用低价值规则）。
     title = 原始标题（可选）；促销/影视/纯股价三类**只看标题**，
-    因为摘要里常出现 discount shopping platform、movie 类比等非促销语境，会造成误剔。"""
+    因为摘要里常出现 discount shopping platform、movie 类比等非促销语境，会造成误剔。
+    has_brand = 标题是否命中任一竞品/领导人实体；用于区分「针对本公司的监管动作」与「选举评论」。"""
     head = title if title is not None else text
     _supply_intel = supply_price_intel(head)
     for name, pat in EXCL:
@@ -591,18 +605,67 @@ def exclusion_reason(text, source, is_overseas, title=None):
     # 例：「Texas Turns Blue in Rebuke of Trump, Musk and GOP」→ 剔；
     #     「Musk's SpaceX wins $X Pentagon contract」→ 含 contract/military，保留。
     if STRONG_POLITICS_PAT.search(head):
-        return '政治攻防/选举结果(非产业情报)'
+        # 中国相关科技议题（芯片/AI/自动驾驶/中美科技监管）优先于政治攻防判据：
+        # 例："Nvidia Loses Billions in China as Export Curbs Bite" 会命中 `loses billion`，
+        # 但它是最核心的中国市场情报。
+        if not china_tech_focus(head):
+            return '政治攻防/选举结果(非产业情报)'
     if POLITICS_PAT.search(head) and not BUSINESS_SIGNAL_PAT.search(head):
-        return '纯政治评论(非产业情报)'
+        # 立法/监管机构针对本公司的实质动作（作证/简报/传唤）属产业情报，不是选举评论
+        if not (has_brand and INSTITUTION_ACTION_PAT.search(head)):
+            return '纯政治评论(非产业情报)'
     if 'amazon' in text and EXCL_ECOMM.search(text) and not re.search(r'\bai\b|artificial intelligence|robot|autonomous|cloud|\baws\b|chip|semiconductor|model| alexa ai', text, re.I):
         return '亚马逊电商/物流(非AI)'
     return None
+
+
+# ===== 中国相关科技议题：必须收录 =====
+# 客户口径：这些品牌在「芯片 / AI / 自动驾驶 / 无人驾驶 / Robotaxi / 中美科技监管」方面
+# **与中国相关**的报道一律要进报（中国是全球竞争格局的主战场，也是百度最直接的对标语境）。
+# 因此这类稿件：
+#   1) 不被各品牌自己的话题门控剔掉（特斯拉 EV/销量、亚马逊非 AI、马斯克非重点、财报前瞻…）
+#      例："Tesla's China sales of FSD-equipped cars…" 命中 TESLA_DROP，但属中国自动驾驶情报；
+#          "Amazon cuts China cloud prices as Alibaba's Qwen wins…" 旧口径下会被当非 AI 剔掉。
+#   2) 不被「纯政治评论」误剔（中美科技监管本身就是产业情报）。
+#   3) 在 curation 中额外加权，排在品牌前列。
+CHINA_SIGNAL_PAT = re.compile(
+    r'\bchina\b|\bchinese\b|\bbeijing\b|\bprc\b|\bmainland\b|\bhong kong\b|\btaiwan\b'
+    r'|\bshanghai\b|\bshenzhen\b|\bhangzhou\b'
+    r'|中国|中方|北京|上海|深圳|杭州|大陆|国行|香港|台湾'
+    r'|\bcac\b|cyberspace administration|工信部|网信办|商务部'
+    r'|rare earth|稀土'
+    # 中国科技公司名本身即「中国相关」：标题未写 China 时（"Oracle scraps deal to lease chips to Tencent"）
+    # 仍应视作中国语境。Biren 不列入（与印度人名冲突，已在品牌表用大小写敏感处理）。
+    r'|\bhuawei\b|\bbyd\b|\bsmic\b|\bymtc\b|\bcxmt\b|\balibaba\b|\btencent\b|\bbytedance\b'
+    r'|\bxiaomi\b|\bbaifu\b|\bbaidu\b|\bdeepseek\b|\bmoonshot\b|qwen|zhipu|minimax|sensetime'
+    r'|\binnolight\b|\bmetax\b|moore threads|iluvatar', re.I)
+CHINA_TECH_PAT = re.compile(
+    # 芯片 / 半导体 / 供应链
+    r'\bchip|chips|semiconductor|\bfab\b|foundry|\bwafer\b|\bhbm\b|\bdram\b|\bnand\b|gpu|accelerator'
+    r'|export control|export ban|entity list|\bblacklist\b|advanced node|lithography'
+    # AI
+    r'|\bai\b|artificial intelligence|generative|\bllm\b|large language model|\bagent\b|model'
+    # 自动驾驶 / 无人驾驶 / Robotaxi
+    r'|autonomous|self-driving|driverless|robotaxi|robotruck|\bfsd\b|\badas\b|smart driving'
+    # 中美科技监管
+    r'|regulation|regulator|antitrust|probe|investigat|\bban\b|\bcurbs?\b|sanction|tariff'
+    r'|national security|data (?:security|localization|transfer)|\bdoj\b|\bftc\b|\bbis\b'
+    r'|congress|senate|white house|lawmakers|hearing|testify',
+    re.I)
+
+
+def china_tech_focus(head):
+    """标题是否为「中国相关的芯片/AI/自动驾驶/Robotaxi/中美科技监管」报道。只看标题。"""
+    return bool(CHINA_SIGNAL_PAT.search(head) and CHINA_TECH_PAT.search(head))
 
 
 def topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl, title_l, excerpt_l, kwkeys_l, content_l, source):
     """精细化口径：针对具体品牌/来源的话题门控，命中则返回剔除原因。
     门控同样只凭「标题」判断，不读摘要/关键词/正文——与归属判定保持同一口径。"""
     head = title_l
+    # 0) 中国相关科技议题必须收录：豁免下面各品牌自己的话题门控（见 china_tech_focus 注释）。
+    #    加密货币仍按 7) 剔除——它与「芯片/AI/自动驾驶/监管」不是同一类议题。
+    cn = china_tech_focus(head)
     # 1) 纯股价波动降噪（不限来源）：仅当标题是股价涨跌且无任何实质议题时剔除
     #    （覆盖 Benzinga "X Stock Climbs..."、Yahoo 股价快讯等；有财报/芯片/AI/监管等实质议题则保留）
     if STOCK_MOVE_PAT.search(head) and not SUBSTANTIVE_PAT.search(head):
@@ -613,23 +676,23 @@ def topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl, title_l, excerpt_l, kwkey
             return 'Yahoo 纯股价分析(降噪)'
     # 2) 马斯克（领导人）话题门控：星链/SpaceX/推特/X/Grok、特斯拉 EV 等非重点 -> 剔除
     musk = any('musk' in e.lower() for e in (auto_l + ovl))
-    if musk and MUSK_DROP.search(head) and not MUSK_KEEP.search(head):
+    if musk and MUSK_DROP.search(head) and not MUSK_KEEP.search(head) and not cn:
         return '马斯克非重点(星链/SpaceX/X/Twitter/Tesla-EV等)'
     # 3) 特斯拉 电动车/股价/销量 剔除（保留 FSD/Robotaxi/Cybercab/机器人/芯片/自动驾驶）
     tesla = any('tesla' in e.lower() for e in (ovb + dom_b + auto_b))
-    if tesla and TESLA_DROP.search(head) and not TESLA_KEEP.search(head):
+    if tesla and TESLA_DROP.search(head) and not TESLA_KEEP.search(head) and not cn:
         return '特斯拉非重点(EV/股价/销量等)'
     # 4) Uber / Lyft 外卖业务剔除（保留自动驾驶/Robotaxi）
     uber_lyft = any(('uber' in e.lower() or 'lyft' in e.lower()) for e in auto_b)
-    if uber_lyft and UBER_LYFT_DROP.search(head) and not UBER_LYFT_KEEP.search(head):
+    if uber_lyft and UBER_LYFT_DROP.search(head) and not UBER_LYFT_KEEP.search(head) and not cn:
         return 'Uber/Lyft 外卖业务(非重点)'
     # 5) 亚马逊：仅保留 AI/云/芯片/Agent/自动驾驶/机器人，其余剔除
     amazon = any('amazon' in e.lower() for e in ovb)
-    if amazon and not AMAZON_KEEP.search(head):
+    if amazon and not AMAZON_KEEP.search(head) and not cn:
         return '亚马逊非AI/云/芯片(电商/广告/硬件等)'
     # 6) 财报前瞻：仅剔除「海外企业」的前瞻稿；自动驾驶与国内企业的前瞻保留
     #    （Uber/小鹏等无人驾驶相关前瞻含 robotaxi 投入信息，国内企业前瞻亦作动态参考）
-    if EARNINGS_PREVIEW_PAT.search(head) and not ACTUAL_EARNINGS_PAT.search(head):
+    if EARNINGS_PREVIEW_PAT.search(head) and not ACTUAL_EARNINGS_PAT.search(head) and not cn:
         pure_overseas = bool(ovb) and not (auto_b or auto_l or dom_b or dom_l)
         if pure_overseas:
             return '财报前瞻(非实际业绩，海外企业)'
@@ -653,6 +716,7 @@ def main():
     ap.add_argument('--kb', required=True, help='翻译知识库.xlsx（含「媒体名称知识库」表）')
     ap.add_argument('--sheet', default='delta', help='工作表名，默认 delta')
     ap.add_argument('--out', default='candidates.json', help='候选输出 json')
+    ap.add_argument('--drops', default='', help='可选：把被剔除的条目连同原因写入该 json，便于核查「该收未收」')
     args = ap.parse_args()
 
     wb = openpyxl.load_workbook(args.input, read_only=True)
@@ -672,6 +736,7 @@ def main():
     # 仅收录 KB 媒体
     kb_wb = openpyxl.load_workbook(args.kb)
     kb_media = set(str(r[0]).strip() for r in kb_wb['媒体名称知识库'].iter_rows(min_row=2, values_only=True) if r[0])
+    kb_brands = set(str(r[0]).strip() for r in kb_wb['品牌名称翻译知识库'].iter_rows(min_row=2, values_only=True) if r[0])
     # 大小写索引：导出里常把 POLITICO / Tech in Asia / marketwatch 写成任意大小写，
     # 精确匹配会让它们被当成「野媒体」静默丢弃。已确认 KB 内不存在仅大小写不同的重名，可安全回退。
     kb_lower = {n.lower(): n for n in kb_media}
@@ -703,7 +768,26 @@ def main():
     if _bad_src_map:
         print('WARNING: SRC_TO_KB 指向不存在的媒体（该映射不会生效）:', _bad_src_map)
 
+    # 启动自检：知识库里有、代码别名表里没有的品牌。
+    # 《翻译知识库》只提供译名，真正决定收录的是 DOMESTIC/AUTO/OVERSEAS_BRANDS——
+    # 只在 KB 里存在的品牌，稿件会被**静默丢弃**（实测：云徙科技 Yunxi Technology）。
+    # 这里直接报出来，避免每批数据「该收未收」却查不到原因。
+    _all_alias = {}
+    for _d in (C_DOM_B, C_AUTO_B, C_OVB):
+        _all_alias.update(_d)
+    _NOT_A_BRAND = {'robotaxi', 'robotaxis', 'cybercab', 'cruise'}   # 品类词 / 单独走 cruise_hit 的 Cruise
+    _unmapped = []
+    for _b in sorted(kb_brands):
+        _parts = [p.strip() for p in _b.split('/') if p.strip()]
+        if any(p.lower() in _NOT_A_BRAND for p in _parts):
+            continue
+        if not any(match_in_text(p, _all_alias) for p in _parts):
+            _unmapped.append(_b)
+    if _unmapped:
+        print('WARNING: 知识库里这些品牌没有对应的别名表条目（其稿件会被丢弃）:', _unmapped)
+
     results = []
+    drops = []
     for r in rows[1:]:
         title = str(col(r, 'title')); source = str(col(r, 'source'))
         country = str(col(r, 'locationCountry')); lang = str(col(r, 'languageCode'))
@@ -745,12 +829,17 @@ def main():
                 auto_b.append('Cruise')
 
         is_overseas = bool(ovb or ovl)
-        reason = exclusion_reason(excl_text, source, is_overseas, title=title)
+        reason = exclusion_reason(excl_text, source, is_overseas, title=title,
+                                  has_brand=bool(dom_b or dom_l or auto_b or auto_l or ovb or ovl))
         if not reason:
             # 传原始标题：门控内正则多为 re.I，但保留大小写便于后续加精确规则
             reason = topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl,
                                title, excerpt_l, kwkeys_l, content.lower(), source)
         if reason:
+            if args.drops:
+                drops.append({'title': title, 'source': source, 'media_kb': media_kb,
+                              'reason': reason, 'url': url,
+                              'brands': dom_b + auto_b + ovb, 'cn_tech': china_tech_focus(title_l)})
             continue
 
         placements = []
@@ -768,6 +857,10 @@ def main():
         for c in ovl:
             placements.append(leader_placement(c, '海外企业'))
         if not placements:
+            if args.drops:
+                drops.append({'title': title, 'source': source, 'media_kb': media_kb,
+                              'reason': '无品牌归属(标题未点名任何 tracked 品牌/领导人)', 'url': url,
+                              'brands': [], 'cn_tech': china_tech_focus(title_l)})
             continue
         seen = set(); uniq = []
         for s, e in placements:
@@ -798,6 +891,12 @@ def main():
     for (s, e), c in sorted(ec.items()):
         print(f'  [{s}] {e}: {c}')
     print('Saved ->', args.out)
+    if args.drops:
+        json.dump(drops, open(args.drops, 'w'), ensure_ascii=False, indent=1)
+        rc = collections.Counter(d['reason'] for d in drops)
+        print('DROPS:', len(drops), '->', args.drops)
+        for k, v in rc.most_common():
+            print(f'  -{v:4d}  {k}')
 
 
 if __name__ == '__main__':
