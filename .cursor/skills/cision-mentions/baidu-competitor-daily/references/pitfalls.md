@@ -29,7 +29,7 @@
 | 23 | 品牌限额挤掉重点稿 | `CAP={'海外企业':5}` 使 Apple 96 条候选只进 5 条；Siri AI、Anthropic IPO、Nvidia 中国业务等 10 条重点稿被挤出 | 取消限额（`CAP` 全置 `None`），收录量交给剔除规则决定；同时用事件级去重控制篇幅 |
 | 24 | 同事件跨媒体刷屏 | 「Google 关闭学校搜索」12 个版本、「OpenAI 聘前陆军部长」7 个版本各占一行 | `prep_final.py` 增加事件级去重：同实体+同板块内，Jaccard≥0.5 或共享≥2 个稀有实词即合并，`--per-event` 默认 1 |
 | 25 | 水果苹果误入 Apple 桶 | `José Pizarro's recipe for mussels with cider, chorizo and apple` 排到 Apple 桶第 2 | 加 `APPLE_FOOD_PAT`（菜谱/果园/果汁）与 `APPLE_TECH_PAT`（iphone/siri/tim cook）对照判定 |
-| 26 | 前瞻一刀切误伤自动驾驶 | Uber Q3 前瞻（含 robotaxi 投入）被当海外竞品前瞻剔除 | 前瞻剔除改为仅对「纯海外竞品」生效（有 ovb 且无 auto/dom 命中） |
+| 26 | 前瞻一刀切误伤自动驾驶 | Uber Q3 前瞻（含 robotaxi 投入）被当海外企业前瞻剔除 | 前瞻剔除改为仅对「纯海外企业」生效（有 ovb 且无 auto/dom 命中） |
 | 27 | 拿 pscore 当噪音判据 | 若按 `pscore>=1` 过滤，会误删 OpenAI 任命前陆军部长、好莱坞诉 OpenAI 版权、Anthropic 5.67 亿亏损、Meta 发债等高价值稿 | 只按议题类别剔除，不按评分阈值；`pscore` 仅用于排序 |
 | 28 | 媒体白名单挡住重要稿 | Waymo 洛杉矶扩张稿（LA Times）因媒体不在 KB 被整条丢弃 | 媒体库补 `Los Angeles Times / 洛杉矶时报`；日后遇到同类先查 KB 而非改规则 |
 
@@ -56,12 +56,37 @@
 | 47 | 单链聚类会链式塌缩 | 改用自动发现后，旧批次 Apple 46 条被并成 45 条一巨簇（甲像乙、乙像丙，传递后全并） | 加护栏 `EVENT_CAP=0.55`：单簇标题数不得超过该实体总数的 55%。旧批次 Apple 恢复为 [21,10,7,3] |
 | 48 | 平均链接虽安全但碎化 | 试过平均链接层次聚类（0.3–0.7）：不再塌缩，但 Uber 财报 13 篇被拆成 6+3+2+2，措辞差异大的大事件碎掉 | 放弃平均链接，回到单链 + 规模护栏——保住大事件，只偶有 1–2 条相邻稿被带入 |
 
+| 49 | 有译名 ≠ 能归类 | 长鑫存储/CXMT、长江存储/YMTC、天数智芯/Iluvatar、壁仞科技/Biren、中际旭创/Innolight 在《翻译知识库》品牌表里都有中文名，但 `DOMESTIC_BRANDS` 未收录 —— 归属环节查不到，稿件被静默丢弃，且日志里看不出异常 | 新增竞品必须**同时**改「知识库品牌表」和「filter3 别名表」，再用一条真实标题验证能否归位。已把 5 家补入国内企业表（芯片/存储/光模块归为一组） |
+| 50 | 品牌名撞常见人名 | `Biren` 也是印度常见名（曼尼普尔首席部长 Biren Singh），大小写不敏感匹配会把政客新闻归到壁仞科技 | 用 `!` 前缀写大小写敏感正则并排除该人名：`!(?<![A-Za-z])(?:Biren|BIREN)(?![A-Za-z])(?!\s+Singh)`；同时保留 `biren technology` 字面量兜底。注意全大写 `BIREN` 也要覆盖 |
+
+| 51 | 促销规则吞掉芯片价格情报 | 裸 `price (?:drop|cut)` 与 `\bgpu\b.{0,25}(price|hike)` 是给零售促销写的，却把 `Memory chip price drop squeezes CXMT margins`、`GPU price hikes boost Biren's outlook`、`Nvidia cuts GPU prices for China market` 当促销/消费硬件剔掉 —— 而存储与 GPU 定价正是这几家最核心的情报 | 新增 `supply_price_intel(head)`：价格变动词 + 供应链主体（chip/dram/nand/hbm/gpu/wafer/optical module…）+ **不含消费电子整机**（iphone/pixel/galaxy/airpods…）→ 豁免 `PROMO_PAT` 与「消费硬件价格/规格」两条规则。18 条用例全过，零售促销仍正常剔除 |
+| 52 | IPO 首日涨跌被当纯股价噪音 | `CXMT shares jump 20% in trading debut` 不含 ipo/valuation 等词，被判「纯股价波动」剔除；而上市首日是公司事件，不是日常股价快讯 | `SUBSTANTIVE_PAT` 补 `(?:trading|market|exchange)\s+debut`；`CXMT shares jump 20% on Tuesday` 这类仍按纯股价剔除 |
+
+| 53 | 媒体名大小写不同被当野媒体 | 导出把 `POLITICO`、`Tech in Asia`、`marketwatch` 写成不同大小写，`src_norm` 只做精确匹配，这些稿件被静默丢弃（11-04 批因此少 3 条 Tech in Asia 稿） | `src_norm` 增加大小写不敏感回退（先确认 KB 内无「仅大小写不同」的重名，因此安全）；`Online` 后缀的剥离也同步做小写版 |
+| 54 | Amazon 的「AI model」标题被剔 | `AMAZON_KEEP` 里只有 `artificial intelligence` 没有裸 `ai`，`Amazon launches new AI model to rival OpenAI` 被判「亚马逊非AI」剔除 | `AMAZON_KEEP` 补 `\bai\b`。注意：`Alexa` 相关仍会被 EXCL 的「智能音箱」规则挡住，若需保留 Alexa AI 战略稿需单独调整该规则 |
+
+| 55 | 入华 Apple Intelligence 稿被挪到阿里 | `Apple Intelligence launches in China with Alibaba's Qwen model` 按「国内企业优先」整条进了「国内企业/阿里巴巴」，Apple 板块看不到最关键的入华动态 | focus 稿改按**标题最早出现实体**归位；`curation.unique_placement` 与 `prep_final` 的归属唯一化**两处都要加同一分支**，否则第二次归位会覆盖第一次 |
+| 56 | focus 加权在飞书文档里看不见 | curation 已给 Apple Intelligence 加 pscore，但飞书发布脚本按 `impact` 重排，不读 `focus` | 定时任务不要改发布脚本。核对 focus 看 `final.json` 的 `focus` 字段，以及入华稿有没有留在标题里最先出现的品牌下 |
+| 57 | 裸 `chinese` 误判为入华 | `Apple Intelligence in Chinese language`（全球语言版）被当成中国市场落地，凭空升高优先级 | `APPLE_CN_PAT` 不用裸 `chinese`，要求 `chinese market/users/regulators/...`；语言类词（language/version/typing）明确排除 |
+
+| 58 | 领导人实体吞掉品牌稿 | `aliases_of` 把 `Dara Khosrowshahi (Uber)` 括号里的 `Uber` 也当成别名，所有 Uber 标题都命中该领导人；再叠加「同位置取 min」依赖 set 遍历顺序，**同一批数据两次运行归属可能不同**（实测 9 条 Uber 稿挂到人名下） | 括号是领导人标记（三个品牌表均无括号），括号内公司名不作为别名；并列位置改为 `(位置, 品牌优先, 实体名)` 确定性排序。草稿版 curation 与 prep_final 各有一份 `aliases_of`，两处都要改 |
+| 59 | SRC_TO_KB 映射到不存在的媒体 | 给地方台加映射时写了 `ABC News`，但 KB 里没有该媒体；`src_norm` 原样返回，于是「未知媒体」通过白名单闸门进报 | `src_norm` 校验映射目标必须在 KB 内，否则返回 None；启动时打印 `WARNING: SRC_TO_KB 指向不存在的媒体` |
+| 60 | 同一媒体多种写法被当野媒体 | 本批 `CNA - CNA Digital` 19 条英文稿、`France24`、`BBC News Online`、`RFI - Radio France Internationale`、`WPSG-TV/WCBS-TV Online` 全被丢弃 | `SRC_TO_KB` 补齐写法（CNA Digital→CNA、France24→France 24 English、BBC News Online→BBC、RFI 全名→RFI、地方台台号→CBS/NBC News） |
+| 61 | 强政治叙事靠弱商业信号逃生 | `Musk Fires Back at Democrats' AI Regulation Push After Midterm Rout` 因含 `AI` 通过 `BUSINESS_SIGNAL_PAT` 豁免，混入自动驾驶板块 | 新增 `STRONG_POLITICS_PAT`（midterm rout / persecute / governor-elect / spent \$X million in / lawyer up / DOGE / loses billions）**优先于**商业信号判断。刻意不含裸 `after the midterm`，保留「选举后股价下跌」这类市场影响稿 |
+| 62 | 个人技巧规则误伤客户重点 | 客户要求保留 Apple Intelligence 的技巧与评测并加权，但通用的「个人使用技巧」规则会把 `How to use Apple Intelligence's new writing tools` 一并剔掉 | 该规则加负向前瞻 `^(?!.*(?:apple intelligence|\bsiri\b|\bai\b))`，先排除 AI 主题再判技巧 |
+
+| 63 | 领导人板块取消后条目丢失风险 | 直接把「企业领导人」板块删掉会让只提人名的稿（`Sundar Pichai says…`）没有品牌命中而被丢弃 | 不是删板块，而是 `leader_placement()` 把领导人**解析成所属品牌**；解析不到才退回自身实体。领导人匹配继续承担「救回归属」作用 |
+| 64 | 领导人实体没有公司信息 | 国内领导人实体是「中文名/英文名」（`马云/Jack Ma`），无括号可取所属公司；`DeepMind`/`AWS` 也不是品牌表 canon 名 | 建 `LEADER_PARENT` 显式表 + `LEADER_PARENT_ALIAS` 归一（DeepMind/Google→Alphabet/Google、AWS→Amazon）。新增领导人时必须同时补这两张表，否则该领导人的稿会单独成节 |
+| 65 | `content` 列缺失导致脚本崩溃 | 直接喂未经 `csv_to_delta` 的 xlsx（无 `content`/`transcript` 列）时，`col()` 里 `idx[n]` 抛 KeyError，整个 filter3 中断 | `col()` 改为缺列返回空串。管线正常路径仍应先用 `csv_to_delta.py`（它会把 transcript 映射为 content） |
+
+| 66 | 缺列崩溃不止 filter3 一处 | 修好 filter3 的 `col()` 后，`curation.py` 的 `load_raw()` 仍因 `content` 列缺失抛 KeyError —— 同一模式的重复实现分散在多个脚本 | 三个脚本的 `col()` 统一改为缺列返回空串。新增脚本若读 xlsx，必须检查是否有同样的直接索引 |
+| 67 | 领导人裸姓会误收 | `Schmidt` 是常见德语姓氏，若按 `Nadella`/`Pichai` 的短名风格给 Eric Schmidt 也加裸姓，会收进 Helmut Schmidt、建筑事务所等无关新闻 | 只收全名 `eric schmidt`。加领导人别名前先想一遍该姓是否常见 |
+
 
 ## 额外注意事项
 
-- **同报道跨板块**：务必以「标题最早出现的品牌」定唯一归属，领导人命中人名优先归领导人板块；国内/自动驾驶板块标题仍命中本板块品牌则不迁移。
-- **国内/自动驾驶为全面收录**：不设条数上限。归属只看标题，不读正文。
-- **媒体中文名口径**：CNBC 等在 KB 为全称「美国消费者新闻与商业频道」，报告按 KB 显示；如需简称需改 KB。
+- **同报道跨板块**：以标题最早出现的品牌定唯一归属。领导人命中人名时归入所属品牌，不要再放回「企业领导人」。国内/自动驾驶标题仍命中本板块品牌则不迁移。
+- **归属只看标题**：不要用正文或关键词频次补归属。
+- **媒体中文名口径**：CNBC 等在 KB 为全称「美国消费者新闻与商业频道」，报告按 KB 显示；如需简称需改 KB 或 `MEDIA_CN` 逻辑。
 - **数据覆盖偏差**：若某期国内/自动驾驶几乎无覆盖，多为数据本身特征，而非筛选问题，不必强行补录。
-- **事件级去重默认关闭**。定时命令不传 `--event-dedup`，不同媒体对同一事件的报道都保留。同一媒体的近题重复仍会去掉。
-- **自动化沉淀**：定时运行走 filter3→curation→prep_final→按标题翻译→`publish_daily_report.py`（清空并重写飞书文档，再发日期和链接）。翻译步骤仍需人工/模型校对。不要把 Word 当作成品。
+- **自动化沉淀**：上海 07:00 与 18:30 仍走父技能：filter3 → curation → prep_final → 填 `zh.json` → `publish_daily_report.py`。不要改成 Word，也不要加 `build_doc.py`。

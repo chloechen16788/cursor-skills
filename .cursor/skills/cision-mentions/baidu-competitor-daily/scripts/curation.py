@@ -14,7 +14,12 @@ def load_raw(raw_path, sheet='delta'):
     header = rows[0]
     idx = {h: i for i, h in enumerate(header)}
     def col(r, n):
-        v = r[idx[n]]
+        # 缺列返回空串而非 KeyError：导出未必含 content/transcript 列，
+        # 直接喂未转换的 xlsx 时曾导致整个脚本中断。
+        i = idx.get(n)
+        if i is None or i >= len(r):
+            return ''
+        v = r[i]
         return v if v is not None else ''
     raw_by_url = {}
     for r in rows[1:]:
@@ -41,6 +46,42 @@ PRIORITY = [
 ]
 
 
+# ===== 客户重点关注：Apple Intelligence =====
+# 客户最关注 Apple Intelligence 的产品动态；其中「入华」相关（落地/上线、合作方、监管审批、
+# 国行功能差异、数据合规）关注度更高，优先级最高。
+#
+# 判定只看**标题**：正文/摘要提到 Apple Intelligence 的财报或股价稿不应因此被抬高。
+APPLE_INTEL_PAT = re.compile(
+    r'apple intelligence'
+    r'|\bsiri\b'
+    r"|apple'?s?\s+(?:ai\b|artificial intelligence)"
+    r'|apple\s+(?:ai\b|artificial intelligence)'
+    # Apple 之后 40 字符内出现独立的 ai —— 覆盖 "Apple restricts AI companions"、
+    # "Apple warns rogue AI agents…" 这类复数/变体写法。\bai\b 不会命中 AirPods（airpods）。
+    r'|apple.{0,40}\b(?:ai|artificial intelligence|generative ai)\b'
+    r'|apple.{0,40}\b(?:ai chief|ai head|ai team|ai strategy|ai companions?|ai agents?)\b',
+    re.I)
+# 入华要素：市场/监管，或为 Apple 提供模型与本地化能力的中国厂商
+# 只认**中国市场/监管**的明确信号，不认裸 `chinese`：
+# "Apple Intelligence in Chinese language" 是语言支持（全球功能），不是入华。
+APPLE_CN_PAT = re.compile(
+    r'\bchina\b|\bmainland\b|中国|大陆|国行|北京|\bbeijing\b'
+    r'|chinese\s+(?:market|users?|consumers?|regulators?|government|authorities|iphone)'
+    r'|\bcac\b|cyberspace administration|工信部|网信办'
+    r'|alibaba|阿里巴巴|qwen|通义|baidu|百度|tencent|腾讯|bytedance|字节|deepseek|moonshot|月之暗面',
+    re.I)
+
+FOCUS_APPLE_CN = 4        # 入华相关：在既有权重之上再 +4
+FOCUS_APPLE_INTEL = 2     # 其他 Apple Intelligence 动态：再 +2
+
+
+def apple_focus(title):
+    """返回 'apple_intel_cn' / 'apple_intel' / ''。只看标题。"""
+    if not APPLE_INTEL_PAT.search(title):
+        return ''
+    return 'apple_intel_cn' if APPLE_CN_PAT.search(title) else 'apple_intel'
+
+
 def priority_score(x, raw_by_url):
     raw = raw_by_url.get(x['url'])
     excerpt, kw, content = raw if raw else ('', '', '')
@@ -55,22 +96,45 @@ def priority_score(x, raw_by_url):
         if re.search(r'ceo|chief|founder|president|says|said|warns|predict|view|interview|观点|表示', t):
             score += 1
             hits.append('领导人观点')
+    # 重点关注：Apple Intelligence（客户第一优先关注）
+    focus = apple_focus(x['title'])
+    if focus == 'apple_intel_cn':
+        score += FOCUS_APPLE_CN
+        hits.append('Apple Intelligence·入华(最重点)')
+    elif focus == 'apple_intel':
+        score += FOCUS_APPLE_INTEL
+        hits.append('Apple Intelligence(重点)')
     # 重点关注：OpenAI / Anthropic 上市融资（额外加权）
     ovb = [e.lower() for e in x.get('ovb', [])]
     if ('openai' in ' '.join(ovb) or 'anthropic' in ' '.join(ovb)) and ('上市/IPO' in hits or '融资/funding' in hits):
         score += 3
         hits.append('OpenAI/Anthropic 上市融资(重点)')
-    return score, hits
+    return score, hits, focus
 
 
 def aliases_of(sec, ent):
-    if sec == '企业领导人':
-        name = ent.split('(')[0].strip()
-        return [name.lower()] if re.search(r'[A-Za-z]', name) else []
+    """实体名 → 用于标题匹配的别名（小写）。
+
+    领导人实体的格式是「人名 (所属公司)」或「中文名/英文名 (公司)」：
+    括号内是**公司归属标注，不是别名**。早先按 '/' 和括号整体切分，会把
+    `Dara Khosrowshahi (Uber)` 里的 `Uber` 也变成别名，于是所有 Uber 标题都命中该领导人，
+    再叠加「同位置取 min」的不稳定排序，Uber 的稿子会随机挂到人名下（实测 9 条）。
+    括号只出现在领导人实体上（三个品牌表均无括号），故用括号作为领导人标记是安全的。
+    """
+    if '(' in ent or '（' in ent:
+        # 只取括号前的人名部分
+        head = re.split(r'[(（]', ent)[0]
+        names = []
+        for p in re.split(r'[/]', head):
+            p = p.strip()
+            if p and re.search(r'[A-Za-z]', p):
+                names.append(p.lower())
+        # 中文名（如「韩旭/Tony Han」中的韩旭）无需转小写匹配，交由 match_in_text 侧处理
+        return names
     if ent == 'Cruise':
         return []  # 避免 "Tom Cruise" 等被误归并到 Cruise
     outs = []
-    for p in re.split(r'[/((（）)]', ent):
+    for p in re.split(r'[/(（（）)]', ent):
         p = p.strip()
         if p and re.search(r'[A-Za-z]', p):
             outs.append(p.lower())
@@ -86,12 +150,24 @@ def unique_placement(x, alias_index):
             hits.append((m.start(), s, e))
     if not hits:
         return x['placements'][0]
+    # 客户重点关注的 Apple Intelligence 稿（尤其入华）：按标题中最早出现的实体归位，
+    # 不套用下面的「国内企业优先」。
+    # 原因：「Apple Intelligence launches in China with Alibaba's Qwen model」这类稿里，
+    # Apple 是主语、阿里是配对方，套国内优先会把它整条挪进「国内企业/阿里巴巴」，
+    # 导致 Apple 板块看不到最关键的入华动态。
+    # 确定性并列处理：同一位置命中多个实体时优先品牌板块，其次按实体名字典序。
+    # 早先只按位置取 min，并列时结果取决于 set 的遍历顺序，同一批数据两次运行可能不同。
+    def _rank(h):
+        return (h[0], h[1], h[2])  # 位置 → 板块名 → 实体名，确保结果稳定
+
+    if x.get('focus'):
+        p = min(hits, key=_rank)
+        return (p[1], p[2])
     if ('国内企业' in secs) or ('自动驾驶' in secs):
         da = [h for h in hits if h[1] in ('国内企业', '自动驾驶')]
         if da:
-            p = min(da, key=lambda h: h[0]); return (p[1], p[2])
-    leads = [h for h in hits if h[1] == '企业领导人']
-    p = min(leads or hits, key=lambda h: h[0])
+            p = min(da, key=_rank); return (p[1], p[2])
+    p = min(hits, key=_rank)
     return (p[1], p[2])
 
 
@@ -148,7 +224,7 @@ def dedup_items(items):
 
 
 # 限额：None 表示该板块/品牌不设上限（用户口径：海外品牌不限额）
-CAP = {'海外企业': None, '企业领导人': None, '国内企业': None, '自动驾驶': None}
+CAP = {'国内企业': None, '自动驾驶': None, '海外企业': None}
 
 
 def main():
@@ -163,9 +239,10 @@ def main():
     raw_by_url = load_raw(args.raw, args.sheet)
 
     for x in data:
-        s, hits = priority_score(x, raw_by_url)
+        s, hits, focus = priority_score(x, raw_by_url)
         x['pscore'] = s
         x['phits'] = hits
+        x['focus'] = focus
 
     # 唯一归属（在限额前完成）
     all_pairs = set()
@@ -205,6 +282,7 @@ def main():
                                   'media_kb': x.get('media_kb', x['source']),
                                   'country': x['country'], 'lang': x['lang'], 'pub': x['pub'],
                                   'impact': x['impact'], 'pscore': x['pscore'], 'phits': x['phits'],
+                                  'focus': x.get('focus', ''),
                                   'section': s, 'entity': e})
 
     json.dump(selected_list, open(args.out, 'w'), ensure_ascii=False, indent=1)

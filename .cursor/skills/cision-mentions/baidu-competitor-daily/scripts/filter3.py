@@ -30,7 +30,17 @@ DOMESTIC_BRANDS = {
     # Moonshot 大小写敏感：公司名首字母大写（Moonshot AI / Moonshot）；小写 moonshot 多指登月计划
     '月之暗面/Moonshot': ['!(?<![A-Za-z])(?:Moonshot|MOONSHOT)(?![A-Za-z])', '月之暗面', 'kimi'],
     '百川智能/Baichuan': ['baichuan', '百川'], '零一万物/01.AI': ['01.ai', '01ai', '零一万物'],    '深度求索/DeepSeek': ['deepseek', '深度求索'], 'Manus': ['manus', '蝴蝶效应'], '华为/Huawei': ['huawei', '华为'],
-    '沐曦/MetaX': ['metax', '沐曦'], '摩尔线程/Moore Threads': ['moore threads', '摩尔线程'], 'SHEIN/希音': ['shein', '希音'],
+    # —— 国内芯片/存储/光模块 ——
+    # 这几家在《翻译知识库》品牌表里一直有中文名，但代码表未收录，稿件在归属环节被静默丢弃。
+    '沐曦/MetaX': ['metax', '沐曦'], '摩尔线程/Moore Threads': ['moore threads', '摩尔线程'],
+    '长鑫存储/CXMT': ['cxmt', '长鑫', 'changxin memory'],
+    '长江存储/YMTC': ['ymtc', '长江存储', 'yangtze memory'],
+    '天数智芯/Iluvatar': ['iluvatar', '天数智芯'],
+    # Biren 是印度常见人名（如曼尼普尔首席部长 Biren Singh），故大小写敏感 + 排除该人名；
+    # 大写 BIREN 为该公司在标题里的常见全大写写法
+    '壁仞科技/Biren': ['!(?<![A-Za-z])(?:Biren|BIREN)(?![A-Za-z])(?!\\s+Singh)', 'biren technology', '壁仞'],
+    '中际旭创/Innolight': ['innolight', '中际旭创', 'zhongji innoclight'],
+    'SHEIN/希音': ['shein', '希音'],
     '拼多多/Pinduoduo': ['pinduoduo', '拼多多'], 'PDD': ['pdd'], 'Temu': ['temu'], '小米/Xiaomi': ['xiaomi', '小米'],
     '商汤科技/SenseTime': ['sensetime', '商汤'], '京东/JD.com': ['jd.com', 'jd ', '京东'], '美团/Meituan': ['meituan', '美团'],
     '奇虎360/Qihoo 360': ['qihoo', '360 ', '奇虎'],
@@ -73,6 +83,8 @@ OVERSEAS_LEADERS = {
     'Matt Garman (AWS)': ['matt garman'], 'Jeff Bezos (Amazon)': ['jeff bezos'], 'Jensen Huang (Nvidia)': ['jensen huang'],
     'Arvind Krishna (IBM)': ['arvind krishna'], 'Sam Altman (OpenAI)': ['sam altman'],
     'Dario Amodei (Anthropic)': ['dario amodei'], 'Bill Gates (Microsoft)': ['bill gates'],
+    # Eric Schmidt：谷歌前 CEO/董事长。只收全名，不收裸 Schmidt（德语姓氏太常见，易误收）
+    'Eric Schmidt (Alphabet/Google)': ['eric schmidt'],
 }
 
 
@@ -173,7 +185,78 @@ SRC_TO_KB = {
     'BNN Bloomberg Online': 'BNN Bloomberg', 'KNTV-TV Online': 'NBC Bay Area',
     'KPYX-TV Online': 'CBS', 'KOVR-TV Online': 'CBS',
     'Nikkei Asian Review': 'Nikkei Asia', 'Nikkei Asia Review': 'Nikkei Asia',
+    # MarketWatch（道琼斯旗下财经站）在导出里可能带 Online 后缀或 .com 域名写法
+    'MarketWatch Online': 'MarketWatch', 'MarketWatch.com': 'MarketWatch',
+    'MarketWatch.com Online': 'MarketWatch', 'Dow Jones MarketWatch': 'MarketWatch',
+    # —— 同一媒体的不同导出写法（KB 里已有该媒体，只是来源名对不上）——
+    # 缺这层会让稿件被当作「未知媒体」静默丢弃：CNA 这一批就丢了 19 条英文稿。
+    'CNA - CNA Digital': 'CNA', 'CNA Digital': 'CNA', 'Channel NewsAsia': 'CNA',
+    'France24': 'France 24 English', 'France 24': 'France 24 English',
+    'RFI - Radio France Internationale': 'RFI', 'RFI English': 'RFI',
+    'BBC News Online': 'BBC', 'BBC News': 'BBC',
+    # 地方台台号 → 所属电视网（与 KPYX/KOVR → CBS 同理）
+    'WPSG-TV Online': 'CBS', 'WCBS-TV Online': 'CBS', 'KCBS-TV Online': 'CBS',
+    'WBBM-TV Online': 'CBS', 'KNXT-TV Online': 'CBS',
+    'WNBC-TV Online': 'NBC News', 'WCAU-TV Online': 'NBC News', 'KNBC-TV Online': 'NBC News',
+    # 自动驾驶垂媒（导出可能带域名或 Online 后缀）
+    'InsideEVs.com': 'InsideEVs', 'Inside EVs': 'InsideEVs', 'InsideEVs Online': 'InsideEVs',
+    'Electrek.co': 'Electrek', 'Electrek Online': 'Electrek', 'Electrek.co Online': 'Electrek',
+    # 历史写法兼容（KB 标准写法为 Tech in Asia）
+    'Tech In Asia': 'Tech in Asia',
 }
+
+
+# ===== 领导人归入所属品牌 =====
+# section 仍只用发布脚本认识的四个名字。能解析到品牌的领导人写入该品牌所在板块
+# （国内企业 / 自动驾驶 / 海外企业），不再写入「企业领导人」。
+# 无法确定所属品牌时保留为独立实体，留在默认板块，不丢条目。
+BRAND_SECTION = {}
+for _c in DOMESTIC_BRANDS:
+    BRAND_SECTION[_c] = '国内企业'
+for _c in AUTO_BRANDS:
+    BRAND_SECTION[_c] = '自动驾驶'
+for _c in OVERSEAS_BRANDS:
+    BRAND_SECTION[_c] = '海外企业'
+
+# 领导人实体括号内标注的公司名，有些不是品牌表里的 canon 名，需要归一
+LEADER_PARENT_ALIAS = {
+    'DeepMind': 'Alphabet/Google', 'Google DeepMind': 'Alphabet/Google',
+    'Alphabet': 'Alphabet/Google', 'Google': 'Alphabet/Google',
+    'AWS': 'Amazon',
+    'WeRide': 'WeRide/文远知行', 'PonyAI': 'PonyAI/小马智行', 'XPeng': 'XPeng/小鹏',
+}
+
+# 实体名里没有括号的领导人（国内领导人多为「中文名/英文名」）需显式指定所属品牌。
+# Elon Musk 横跨 Tesla / SpaceX / X / xAI，没有单一归属，保留为独立实体（仍在自动驾驶板块）。
+LEADER_PARENT = {
+    '马云/Jack Ma': '阿里巴巴/Alibaba', '蔡崇信/Joe Tsai': '阿里巴巴/Alibaba',
+    '吴泳铭/Eddie Wu': '阿里巴巴/Alibaba', '井贤栋/Eric Jing': '蚂蚁集团/Ant Group',
+    '张一鸣/Zhang Yiming': '字节跳动/ByteDance', '梁汝波/Liang Rubo': '字节跳动/ByteDance',
+    '周受资/Shou Zi Chew': 'TikTok', '马化腾/Pony Ma': '腾讯/Tencent',
+    '刘炽平/Martin Lau': '腾讯/Tencent', '黄峥/Colin Huang': '拼多多/Pinduoduo',
+    '杨植麟/Zhilin Yang': '月之暗面/Moonshot', '程一笑/Yixiao Cheng': '快手/Kuaishou',
+    '闫俊杰/Yan Junjie': 'MiniMax', '梁文锋/Liang Wenfeng': '深度求索/DeepSeek',
+    '埃隆·马斯克/Elon Musk': None,
+}
+
+
+def leader_parent(canon):
+    """取领导人的所属公司：优先查显式表，其次解析实体名里的括号标注。"""
+    if canon in LEADER_PARENT:
+        return LEADER_PARENT[canon]
+    m = re.search(r'[(（]\s*([^)）]+?)\s*[)）]', canon)
+    if not m:
+        return None
+    p = m.group(1).strip()
+    return LEADER_PARENT_ALIAS.get(p, p)
+
+
+def leader_placement(canon, default_section):
+    """领导人 → (板块, 品牌实体)；找不到所属品牌时退回自身实体，避免条目被丢。"""
+    p = leader_parent(canon)
+    if p and p in BRAND_SECTION:
+        return (BRAND_SECTION[p], p)
+    return (default_section, canon)
 
 
 def market_ok(country, kb_media):
@@ -200,11 +283,11 @@ EXCL = [
     ('纯估值倍数评论(低价值)', re.compile(r'(forward p/e|price-to-earnings|p/e ratio)', re.I)),
     ('消费电子评测/导购', re.compile(r'(ipad|iphone|airpods|earbuds|apple watch|macbook|pixel|galaxy|surface|kindle|headphones|smartwatch|tablet|laptop).{0,45}(hands-on|review|should you buy|unboxing|first look|worth (?:it|buying)|i tried|tested)', re.I)),
     ('股评/荐股栏目', re.compile(r"(bulls vs\.? bears|money quote|heard on the street|cramer|stop trading|bloomberg talks|options action|stock movers|what'?s going on with .{0,30}stock|s&p 500 futures|top picks|trading ideas)", re.I)),
-    ('分析师评级/目标价/荐股', re.compile(r'(price target|analyst (?:forecast|rating|note|sees|says|thinks)s?|top \d+ analyst|top analyst|here are \d+ top|\btrade the fear\b|buy rating|sell rating|\boverweight\b|\bunderweight\b|\d+% (?:upside|potential)|stock: |to \$?\d+\?|slowdown begin|stocks? to watch|stocks? making the biggest|scoops? up|ark (?:sells|buys)|implodes|sheds \$|forget \w+: why|safe haven|long-term investors|next \d+ trading days|watchlist|bullpen|shares remain attractive|longtime bull|bull who defends|steep valuation|mack daddy|absurdly cheap|deeply undervalued|hidden gem|worth buying now|is a buy\b|time to buy|overvalued|undervalued|fair value)', re.I)),
+    ('分析师评级/目标价/荐股', re.compile(r'(price target|analyst (?:forecast|rating|note|sees|says|thinks)s?|top \d+ analyst|top analyst|here are \d+ top|\btrade the fear\b|buy rating|sell rating|\boverweight\b|\bunderweight\b|\d+% (?:upside|potential)|stock: |to \$?\d+\?|slowdown begin|stocks? to (?:watch|buy|own|hold|sell)|stocks? making the biggest|scoops? up|ark (?:sells|buys)|implodes|sheds \$|forget \w+: why|safe haven|long-term investors|next \d+ trading days|watchlist|bullpen|shares remain attractive|longtime bull|bull who defends|steep valuation|mack daddy|absurdly cheap|deeply undervalued|hidden gem|worth buying now|is a buy\b|time to buy|overvalued|undervalued|fair value)', re.I)),
     ('消费硬件价格/规格', re.compile(r'(rtx \d|\bgpu\b.{0,25}(price|hike|shortage)|graphics card|gb of vram)', re.I)),
     ('财经视频/综述栏目', re.compile(r'^(?:watch |video:)| - bloomberg$|world in brief|in brief:', re.I)),
     ('广告/营销软文', re.compile(r'(shopping ads|tuning bids|more than scaling|advertorial|sponsored content)', re.I)),
-    ('大盘/指数行情', re.compile(r'(s&p 500|nasdaq 100|stock futures|stock market today|market today|stocks set for|premarket trading|futures mixed|reverse gains to close|stocks moving (?:lower|higher)|biggest moves)', re.I)),
+    ('大盘/指数行情', re.compile(r'(s&p 500|nasdaq 100|stock futures|(?:dow|nasdaq|s&p)\s+(?:jones\s+)?futures|stock market today|market today|stocks set for|premarket trading|futures mixed|reverse gains to close|stocks moving (?:lower|higher)|biggest moves)', re.I)),
     ('律所/投资者公告', re.compile(r'(investor alert|lawsuit has been filed|class action|reminds .{0,30}investors|urges investors to contact|notifies investors)', re.I)),
     ('投资论点/估值', re.compile(r"(p/e ratio|p/e distortion|crown jewel|i'?m not touching|\bfomo\b|easy gains|is key for .{0,25}future|etf to own|outperform|valuation masks|questions? .{0,25}valuation)", re.I)),
     ('财经栏目/通讯', re.compile(r"(bloomberg tech:|cnbc's .{0,30}newsletter|fortune tech:|the china connection newsletter)", re.I)),
@@ -212,6 +295,86 @@ EXCL = [
     ('非Meta公司(metaEye/optics相机)', re.compile(r'(metaeye|meta-optics|metaoptics)', re.I)),
     ('苹果手机/硬件配件(低相关)', re.compile(r'(retail security brackets|security brackets for apple|iphone duo|apple homeview|ipad.{0,20}(bracket|case|cover))', re.I)),
     ('低价值股市噪音', re.compile(r'(etf.{0,40}adds|quality factor etf|adds apple and microsoft|intel q3 earnings preview: stock down|what is going on with intel stock|could a rally get president trump to highlight)', re.I)),
+    # —— 散户理财/股价推算：只教人算收益、猜底、择时，无竞争情报 ——
+    # 与「股评/荐股」「投资论点/估值」互补：那两条抓栏目与评级，这条抓散户视角的股价文。
+    ('散户股价推算/择时', re.compile(
+        r'(if you (?:had )?invested \$|what history suggests is the floor'
+        r'|cheaper than a (?:toilet|toilet-paper|cigarette|beer)'
+        r'|\boptions traders\b|\bputs? and calls?\b|is now down (?:this|for the) year'
+        r'|stock is back down at|share (?:dip|slide|drop)\b.{0,30}(?:trigger|wider|selloff)'
+        r'|\bbuy \w+ or \w+\?|look like bargains?|\bthe floor\b'
+        r'|time to (?:buy|sell) (?:the )?(?:dip|stock)|is it time to buy'
+        r'|cathie wood (?:buys|sells|adds|trims)|buys? \$[\d.,]+ million of'
+        r'|warning for investors|investors heading into \d{4}'
+        r'|^opinion\s*[|:])', re.I)),
+
+    # —— intel = 「情报」而非 Intel 公司 ——
+    ('intel=情报(非Intel公司)', re.compile(
+        r'\bintel (?:report|reports|assessment|community|agencies|agency|official|officials|briefing|source)\b'
+        r'|\bin intel\b|\bintel report\b', re.I)),
+
+    # —— 本地商家好评/SEO 软文（Google Reviews 与科技公司无关）——
+    ('本地商家好评软文', re.compile(
+        r'google reviews?\b.{0,60}(?:home sellers?|realtor|roofing|plumb|dentist|law firm|pest control|hvac)'
+        r'|reviews? recognize .{0,50}(?:for (?:honest|excellent|outstanding)|home sellers?)'
+        r'|\bgoogle reviews? recognize\b', re.I)),
+
+    # —— 罪案/司法花边（与公司业务无关的个案）——
+    ('罪案/司法花边', re.compile(
+        r'found guilty for (?:threatening|murder|assault)|murder-for-hire'
+        r'|catches? (?:a )?thief|home invasion|carjacking|caught (?:stealing|shoplifting)'
+        r'|sentenced to \d+ years|arrested for (?:threatening|assault)', re.I)),
+
+    # —— 致富教程/副业指南 ——
+    ('致富教程/副业指南', re.compile(
+        r'turn your .{0,30} into a \$|into a \$[\d,]+ (?:business|side hustle|income)'
+        r'|how to (?:make|earn) \$[\d,]+ (?:a|per) (?:month|week|day)'
+        r'|start (?:a|your) \$[\d,]+ (?:business|side hustle)', re.I)),
+
+    # —— 娱乐/职业转型花边 ——
+    ('娱乐/职业转型花边', re.compile(
+        r'made the move from \w+ to (?:tv|film|hollywood)|comedy star .{0,40}(?:tiktok|youtube)'
+        r'|from (?:tiktok|youtube|instagram) to (?:tv|film|hollywood)', re.I)),
+
+    # —— 软件 bug/更新日志（非产品战略）——
+    ('软件bug/更新日志', re.compile(
+        r'copy-paste bug|\bbug\b.{0,30}(?:reintroduc|fixed|fixed it)'
+        r'|excel \d{4}|office \d{4}|seasonal clock change|daylight saving'
+        r'|(?:fixed|patched) (?:a )?(?:bug|issue).{0,40}(?:then|now)', re.I)),
+
+    # —— 富豪榜/豪宅地产 ——
+    ('富豪榜/地产花边', re.compile(
+        r'billionaire (?:ranking|rankings|list|magnet|enclave)|drops? to no\. \d+ in'
+        r'|created \d+ billionaires?|\d+ billionaires? worth'
+        r'|\bnet worth\b.{0,40}(?:ranking|list|falls|drops)', re.I)),
+
+    # —— 通稿/SEO 换皮（小站转载、产品上架贴）——
+    ('通稿/SEO换皮', re.compile(
+        r'\bxinhua silk road\b|integrates openai.{0,40}(?:a day after|running)'
+        r'|\baivideofree\b|\bfreddy\b x google|logo new website|now available on .{0,20}marketplace', re.I)),
+
+    # —— 怀旧开箱/复古测评 ——
+    ('怀旧开箱/复古测评', re.compile(
+        r'(?:back|return) to unboxing|unboxing a geforce|nostalgia|throwback to \d{4}', re.I)),
+
+    # —— 个人使用技巧（非产品战略）——
+    # 注意：客户明确要求保留 Apple Intelligence / Siri 的评测与上手稿并加权，
+    # 故此处用负向前瞻把它们排除在外，避免误伤。
+    ('个人使用技巧/教程', re.compile(
+        r'^(?!.*(?:apple intelligence|\bsiri\b|\bai\b))'
+        r'(?:how i (?:use|set up|trick)|how to use (?:your|my)|tips? (?:and tricks )?for (?:using|getting)'
+        r'|without (?:opening|needing)|step[- ]by[- ]step guide to (?:using|setting up))', re.I)),
+
+    # —— 第一人称走访/见闻（非产业情报）——
+    ('第一人称走访/见闻', re.compile(
+        r'^i (?:went to|visited|spent a day|sat down with)|everyone (?:talked|was talking) about'
+        r'|what i (?:learned|saw) (?:at|from) (?:a|an|the) ', re.I)),
+
+    # —— 社媒使用场景/公益宗教（平台被使用，非平台经营）——
+    ('社媒使用场景/公益', re.compile(
+        r'missionar|take to (?:tiktok|instagram|youtube|facebook) to reach'
+        r'|to reach younger generations|church|parish|charity drive', re.I)),
+
     ('低价值/无关内容', re.compile(r'(dear .* stock fans|mark your calendars for|how much traders expect .* stock to move|\$\d+ off right now|let the rationalizing begin|reminds .* investors of .* class action|securities class action lawsuit deadline|equity action reminder|lead plaintiff deadline|flippening|to do my job for a day|terra 6\.1|are \$?\d+ off)', re.I)),
     # 律所/事故索赔广告（非公司新闻）："Car Accident Attorney Explains Uber Claims" 之类
     ('律所/事故索赔广告', re.compile(r'(accident attorney|accident lawyer|injury attorney|injury lawyer|car accident|truck accident|personal injury|claims? (?:against|for) .{0,20}(uber|lyft)|free consultation|no win no fee)', re.I)),
@@ -238,6 +401,10 @@ TITLE_ONLY_RULES = {
     '财经视频/综述栏目', '系统使用技巧(非竞争情报)', '广告/营销软文', '低价值股市噪音',
     '财报电话会逐字稿(低价值)', '生活/消费杂讯(低价值)', '律所/事故索赔广告',
     '商业软文/产品上架', '生活/情感专栏', '个人理财/攻略', '清单体/调侃文', '他业类比(非本公司)', '人物/影视访谈',
+    # 以下为标题层面的体裁判断，只看标题（摘要里常有股价/评论语境，一并扫会误剔实质稿）
+    '散户股价推算/择时', 'intel=情报(非Intel公司)', '本地商家好评软文', '罪案/司法花边',
+    '致富教程/副业指南', '娱乐/职业转型花边', '软件bug/更新日志', '富豪榜/地产花边',
+    '通稿/SEO换皮', '怀旧开箱/复古测评', '个人使用技巧/教程', '社媒使用场景/公益',
 }
 
 # 纯政治评论：选举horse-race、民调、党派攻防——不含任何商业/AI/产品信号时无竞争情报价值。
@@ -247,7 +414,17 @@ POLITICS_PAT = re.compile(
     r'poll(?:s|ing)?\b|gop|democrat|republican|senate race|primary race|trump|biden|'
     r'political fortune|spent \$|spending \$|spend \$|donor|pac\b|super pac|endors(?:e|ed|ement)|'
     r'campaign|inaugurat|swing state|texas turns blue|vote red|lost the election|election bet|'
+    r'\bdoge\b|lawyer up|persecut|political retribution|'
     r'midterms failure|political party|talarico|mamdani|sanders accuses|politics|\bsenate\b|\bcongress\b|campaign trail|re-election bid)', re.I)
+# 强政治判据：选举结果/党争攻防/政治报复类叙事，即使提到股价代码或 AI 监管，
+# 也不是产业情报——这些词本身就是「政治故事」的标记，故命中即剔，不被 BUSINESS_SIGNAL 豁免。
+# 注意不包含裸 `after the midterm`：那会误伤「选举后特斯拉股价为何下跌」这类市场影响稿，
+# 后者此前已确认保留。
+STRONG_POLITICS_PAT = re.compile(
+    r'midterm rout|persecut|governor-elect|election night|fires back at (?:democrats|republicans|critics)'
+    r'|spent (?:at least )?\$[\d.,]+ million in|lawyer up|political retribution|\bdoge\b'
+    r'|loses? billions', re.I)
+
 BUSINESS_SIGNAL_PAT = re.compile(
     r'(\bai\b|artificial intelligence|\bchip|semiconductor|datacent|data cent|robotaxi|'
     r'self-driving|autonomous|\brobot\b|contract|tariff|antitrust|lawsuit|\bdoj\b|\bftc\b|\bsec\b|'
@@ -257,6 +434,30 @@ BUSINESS_SIGNAL_PAT = re.compile(
 # 促销/折扣/导购（只看标题）：任何品牌的纯促销都无竞争情报价值。
 # 不能用裸 deal（"ADNOC OpenAI Deal" 是商业交易）、裸 sale（"sales" 是销售额）、
 # 裸 discount（"discount shopping platform" 指折扣电商模式）。
+# —— 芯片/存储/供应链价格 ≠ 零售促销 ——
+# "Memory chip price drop squeezes CXMT margins"、"GPU price hikes boost Biren" 是核心竞争情报，
+# 但裸 `price drop/cut` 与 `\bgpu\b.{0,25}(price|hike)` 会把它们当成促销/消费硬件价格剔掉。
+# 判据：出现价格变动 + 供应链主体（DRAM/NAND/晶圆/GPU/芯片…）且**不含消费电子整机**（iPhone/Pixel/耳机…）→ 视为情报。
+PRICE_MOVE_PAT = re.compile(
+    r'(?:price|pricing|cost)s?\s*(?:drop|cut|hike|rise|surge|slump|decline|war|pressure)'
+    r'|(?:drop|cut|hike|raise|lower|slash)s?\b.{0,20}\b(?:price|pricing)', re.I)
+SUPPLY_SUBJECT_PAT = re.compile(
+    r'\b(?:dram|nand|hbm|wafer|foundry|node|capacity|asp|contract|spot|inventory|memory'
+    r'|chip|chips|semiconductor|gpu|cpu|accelerator|optical module|laser|substrate)\b', re.I)
+CONSUMER_DEVICE_PAT = re.compile(
+    r'\b(?:iphone|ipad|macbook|pixel|galaxy|airpods|earbuds|apple watch|watch series|kindle|echo'
+    r'|fire tv|surface|headphones|smartwatch|laptop|tablet|console|ps5|xbox|nest|chromecast|buds)\b', re.I)
+
+
+def supply_price_intel(head):
+    """标题是否为「芯片/存储/供应链价格变动」这类竞争情报（而非零售促销）。"""
+    if not PRICE_MOVE_PAT.search(head):
+        return False
+    if CONSUMER_DEVICE_PAT.search(head):
+        return False          # 明确指向消费电子整机 → 仍按促销处理
+    return bool(SUPPLY_SUBJECT_PAT.search(head))
+
+
 PROMO_PAT = re.compile(
     r'(\$\d[\d,]*\s*off|\d+\s*(?:%|percent)\s*off|price (?:drop|cut|slashes?)\b|record[- ]low(?:est)? price|lowest price (?:ever|yet)'
     r'|black friday|cyber monday|prime (?:day|big deal day)|\bbest .{0,25}deals?\b|deals? of the (?:day|week)'
@@ -285,7 +486,7 @@ PR_PAT = re.compile(r'(press ?release|prnewswire|pr newswire|globe ?newswire|ein
 # ================= 精细化口径（9 条 + 后续修正） =================
 # 1) Yahoo Finance 纯股价分析降噪：仅 source 含 yahoo 且为纯股价波动、无实质话题时剔除
 YAHOO_STOCK_PAT = re.compile(r'(shares (?:rise|fall|jump|slip|drop|climb|tumble|soar|plunge|gain|lose|rally|slide|surge|sink|slump|edge|tick)|stock (?:rises|falls|jumps|slips|drops|climbs|tumbles|pops|slides|sinks|slumps|rallies|edges)|price target|upgraded|downgraded|buy rating|sell rating|analyst rating|stock price|market cap|catalyst|options trade|calls and puts|why .* stock)', re.I)
-SUBSTANTIVE_PAT = re.compile(r'(\bai\b|artificial intelligence|\bagent\b|robotaxi|cybercab|robot|\bchip|semiconductor|memory|dram|nand|margin|pricing|supply chain|cloud|\baws\b|autonomous|self-driving|fsd|model|earnings|revenue|profit|guidance|outlook|regulation|antitrust|lawsuit|probe|investigat|\bipo\b|funding|valuation|launch|partnership|deal|tariff|\bchina\b|political|election|trump|biden|senate|congress|white house)', re.I)
+SUBSTANTIVE_PAT = re.compile(r'(\bai\b|artificial intelligence|\bagent\b|robotaxi|cybercab|robot|\bchip|semiconductor|memory|dram|nand|margin|pricing|supply chain|cloud|\baws\b|autonomous|self-driving|fsd|model|earnings|revenue|profit|guidance|outlook|regulation|antitrust|lawsuit|probe|investigat|\bipo\b|(?:trading|market|exchange)\s+debut|funding|valuation|launch|partnership|deal|tariff|\bchina\b|political|election|trump|biden|senate|congress|white house)', re.I)
 
 # 纯股价波动（不限来源）：标题只描述股价涨跌/评级，无实质议题时剔除。
 # 注意只匹配「股票/股价 + 涨跌动词」这种结构，避免误伤 "sales rise"（销售额增长）等实质数据。
@@ -299,7 +500,7 @@ STOCK_MOVE_PAT = re.compile(
 # 2) 马斯克（领导人）+ 特斯拉 话题门控：仅基于 标题+摘要+关键词（避免正文 transcript 污染）
 #    剔除：星链/SpaceX/推特/X(Twitter)/Grok、特斯拉 EV/股价/销量 等非重点；
 #    保留：AI/Agent/Robotaxi/Cybercab/FSD/芯片/自动驾驶/重大政治事件
-MUSK_DROP = re.compile(r'(starlink|spacex|\btwitter\b|grok(?!\s*ai)|on\s+x\b|\bx\s+(?:platform|corp|social|ai|users?|faces|sues|scrutiny|the company|app)|tesla.{0,40}(?:ev|electric|vehicle|model|delivery|sales|car|cybertruck|refresh|update|record|production))', re.I)
+MUSK_DROP = re.compile(r'(starlink|spacex|starship|\btwitter\b|grok(?!\s*ai)|on\s+x\b|\bx\s+(?:platform|corp|social|ai|users?|faces|sues|scrutiny|the company|app)|tesla.{0,40}(?:ev|electric|vehicle|model|delivery|sales|car|cybertruck|refresh|update|record|production))', re.I)
 MUSK_KEEP = re.compile(r'(\bai\b|artificial intelligence|\bagent\b|robotaxi|cybercab|\brobot\b|\bchip|semiconductor|autonomous|self-driving|\bfsd\b|political|election|trump|biden|white house|senate|congress|regulation|antitrust|lawsuit|doj|sec)', re.I)
 TESLA_DROP = re.compile(r'tesla.{0,40}(?:sales|deliver|deliveries|stock|shares|price target|q[1-4]|earnings|production|gigafactory|factory|\bev\b|vehicles?|cars?|car\s|model\s|delivery|record|missed?|beat|cybertruck|update|refresh|redesign)', re.I)
 TESLA_KEEP = re.compile(r'(fsd|robotaxi|cybercab|autonomous|self-driving|\bchip|semiconductor|\bai\b|artificial intelligence|\bagent\b|\brobot\b|dojo|optimus)', re.I)
@@ -310,8 +511,7 @@ UBER_LYFT_KEEP = re.compile(r'(robotaxi|autonomous|self-driving|driverless|waymo
 
 # 4) 亚马逊：仅保留 AI/云/芯片/Agent/自动驾驶/机器人；其余（电商/广告/硬件/物流/偶发 AI 营销）剔除
 #    注意：不使用裸 \bai\b（会命中 "AI 拍照亭" 等偶发 AI 营销），改用 substantive Amazon-AI 信号
-# 不把裸 deal 当作保留词，否则 “Kindle deal” 会留下；芯片/云/并购类标题仍由 aws、chip、acquisition 等命中。
-AMAZON_KEEP = re.compile(r'(artificial intelligence|alexa ai|\baws\b|cloud|bedrock|chip|semiconductor|agent|autonomous|self-driving|robot|zoox|generative|foundation model|\bllm\b|\banthropic\b|\bopenai\b|acquisition|merger|antitrust|regulator|\bfcc\b|lawsuit|\bdoj\b)', re.I)
+AMAZON_KEEP = re.compile(r'(\bai\b|artificial intelligence|alexa ai|\baws\b|cloud|bedrock|chip|semiconductor|agent|autonomous|self-driving|robot|zoox|generative|foundation model|\bllm\b|acquisition|merger|antitrust|regulator|\bfcc\b|lawsuit|deal|\bdoj\b)', re.I)
 
 # 5) 财报前瞻（仅剔前瞻，保留实际业绩）；ACTUAL 仅认“已公布业绩”措辞，避免 "Q3 earnings preview" 被误判为实际
 EARNINGS_PREVIEW_PAT = re.compile(r'(earnings preview|results preview|quarterly preview|earnings watch|preview of (?:the |its |their |upcoming )?(?:earnings|quarterly|results)|ahead of (?:the |its |their |upcoming |this |next )?(?:earnings|results|report)|what to expect (?:from|as|when|before|around)|to report (?:its|their|first|second|third|fourth|q[1-4]|earnings)|before (?:the |its |their )?(?:earnings|results) report|is set to report|expected to report|will report|reports (?:its |their )?earnings (?:tomorrow|next|on |this |monday|tuesday|wednesday|thursday|friday|week)|everything you need to know (?:ahead|before)|earnings season preview|set to (?:release|announce) (?:its |their )?earnings|(?:earnings|results) on deck|on deck (?:thursday|wednesday|tuesday|monday|friday|as|for))', re.I)
@@ -355,13 +555,18 @@ def exclusion_reason(text, source, is_overseas, title=None):
     title = 原始标题（可选）；促销/影视/纯股价三类**只看标题**，
     因为摘要里常出现 discount shopping platform、movie 类比等非促销语境，会造成误剔。"""
     head = title if title is not None else text
+    _supply_intel = supply_price_intel(head)
     for name, pat in EXCL:
         target = head if name in TITLE_ONLY_RULES else text
+        # 「消费硬件价格/规格」针对的是消费级显卡涨价等零售话题；
+        # 芯片/存储的价格变动属竞争情报，不按此条剔除。
+        if name == '消费硬件价格/规格' and _supply_intel:
+            continue
         if pat.search(target):
             return name
     # —— 以下三类只看标题 ——
     # 促销/折扣：标题即促销特征的才剔（摘要里的 "discount platforms" 是商业模式）
-    if PROMO_PAT.search(head):
+    if PROMO_PAT.search(head) and not _supply_intel:
         return '促销/折扣/导购'
     # "Big Apple" 指纽约市，不是苹果公司
     if re.search(r'big apple', head, re.I) and not re.search(r'iphone|ipad|macbook|siri|cupertino|tim cook|ternus', head, re.I):
@@ -385,6 +590,8 @@ def exclusion_reason(text, source, is_overseas, title=None):
     # 纯政治评论（选举horse-race/民调/党派攻防）：不含商业信号时无竞争情报价值。
     # 例：「Texas Turns Blue in Rebuke of Trump, Musk and GOP」→ 剔；
     #     「Musk's SpaceX wins $X Pentagon contract」→ 含 contract/military，保留。
+    if STRONG_POLITICS_PAT.search(head):
+        return '政治攻防/选举结果(非产业情报)'
     if POLITICS_PAT.search(head) and not BUSINESS_SIGNAL_PAT.search(head):
         return '纯政治评论(非产业情报)'
     if 'amazon' in text and EXCL_ECOMM.search(text) and not re.search(r'\bai\b|artificial intelligence|robot|autonomous|cloud|\baws\b|chip|semiconductor|model| alexa ai', text, re.I):
@@ -420,12 +627,12 @@ def topic_gate(dom_b, dom_l, auto_b, auto_l, ovb, ovl, title_l, excerpt_l, kwkey
     amazon = any('amazon' in e.lower() for e in ovb)
     if amazon and not AMAZON_KEEP.search(head):
         return '亚马逊非AI/云/芯片(电商/广告/硬件等)'
-    # 6) 财报前瞻：仅剔除「海外竞品」的前瞻稿；自动驾驶与国内竞品的前瞻保留
-    #    （Uber/小鹏等无人驾驶相关前瞻含 robotaxi 投入信息，国内竞品前瞻亦作动态参考）
+    # 6) 财报前瞻：仅剔除「海外企业」的前瞻稿；自动驾驶与国内企业的前瞻保留
+    #    （Uber/小鹏等无人驾驶相关前瞻含 robotaxi 投入信息，国内企业前瞻亦作动态参考）
     if EARNINGS_PREVIEW_PAT.search(head) and not ACTUAL_EARNINGS_PAT.search(head):
         pure_overseas = bool(ovb) and not (auto_b or auto_l or dom_b or dom_l)
         if pure_overseas:
-            return '财报前瞻(非实际业绩，海外竞品)'
+            return '财报前瞻(非实际业绩，海外企业)'
     # 7) 加密货币相关剔除
     if CRYPTO_PAT.search(head):
         return '加密货币相关'
@@ -454,12 +661,20 @@ def main():
     header = rows[0]
     idx = {h: i for i, h in enumerate(header)}
     def col(r, n):
-        v = r[idx[n]]
+        # 缺列时返回空串而不是 KeyError：监测导出并非总有 content/transcript 列，
+        # 直接喂原始 xlsx（未经 csv_to_delta）时曾因此整个脚本崩溃。
+        i = idx.get(n)
+        if i is None or i >= len(r):
+            return ''
+        v = r[i]
         return v if v is not None else ''
 
     # 仅收录 KB 媒体
     kb_wb = openpyxl.load_workbook(args.kb)
     kb_media = set(str(r[0]).strip() for r in kb_wb['媒体名称知识库'].iter_rows(min_row=2, values_only=True) if r[0])
+    # 大小写索引：导出里常把 POLITICO / Tech in Asia / marketwatch 写成任意大小写，
+    # 精确匹配会让它们被当成「野媒体」静默丢弃。已确认 KB 内不存在仅大小写不同的重名，可安全回退。
+    kb_lower = {n.lower(): n for n in kb_media}
 
     def src_norm(s):
         s = s.strip()
@@ -467,7 +682,26 @@ def main():
             return s
         if s.endswith(' Online') and s[:-7] in kb_media:
             return s[:-7]
-        return SRC_TO_KB.get(s)
+        # SRC_TO_KB 的目标必须是 KB 内真实存在的媒体；
+        # 否则会以「未知媒体名」通过白名单闸门（曾差点把不在库的 ABC News 放进来）。
+        if s in SRC_TO_KB:
+            v = SRC_TO_KB[s]
+            return v if v in kb_media else None
+        # 大小写不敏感 + 剥 Online 后缀再试
+        low = s.lower()
+        if low in kb_lower:
+            return kb_lower[low]
+        if low.endswith(' online') and low[:-7] in kb_lower:
+            return kb_lower[low[:-7]]
+        for k, v in SRC_TO_KB.items():
+            if k.lower() == low:
+                return v if v in kb_media else None
+        return None
+
+    # 启动自检：SRC_TO_KB 里指向不存在媒体的映射直接报出来，避免静默失效
+    _bad_src_map = sorted({k for k, v in SRC_TO_KB.items() if v not in kb_media})
+    if _bad_src_map:
+        print('WARNING: SRC_TO_KB 指向不存在的媒体（该映射不会生效）:', _bad_src_map)
 
     results = []
     for r in rows[1:]:
@@ -520,14 +754,19 @@ def main():
             continue
 
         placements = []
-        for c in (dom_b + dom_l):
+        for c in dom_b:
             placements.append(('国内企业', c))
-        for c in (auto_b + auto_l):
+        for c in auto_b:
             placements.append(('自动驾驶', c))
         for c in ovb:
             placements.append(('海外企业', c))
+        # 领导人一律归到所属品牌下方（不再单列板块）；无法确定所属品牌才保留自身实体
+        for c in dom_l:
+            placements.append(leader_placement(c, '国内企业'))
+        for c in auto_l:
+            placements.append(leader_placement(c, '自动驾驶'))
         for c in ovl:
-            placements.append(('企业领导人', c))
+            placements.append(leader_placement(c, '海外企业'))
         if not placements:
             continue
         seen = set(); uniq = []

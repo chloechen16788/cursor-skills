@@ -16,21 +16,26 @@
 - 联合国 / OECD / IEA 等机构 AI 预警
 - 就业影响
 
-## 二、四大板块（顺序固定）
+## 二、板块（`section` 字段，顺序固定）
 
-| 顺序 | 板块 | 合并/拆分 | 上限 |
-|------|------|-----------|------|
-| 一 | 国内企业（含领导人） | 合并板块 | **无** |
-| 二 | 自动驾驶（含领导人） | 合并板块 | **无** |
-| 三 | 海外竞品企业 | 按品牌拆分 | **无** |
-| 四 | 海外竞品领导人 | 按人名拆分 | **无** |
+定时飞书文档仍由上一级 `publish_daily_report.py` 印出四个标题：国内企业、自动驾驶、海外企业、企业领导人。
+处理模块不改这四个字段名。2026-11-06 起，能解析到所属品牌的领导人不再写入「企业领导人」，而是挂到品牌下
+（马云 → 国内企业/阿里巴巴，Sundar Pichai → 海外企业/Alphabet/Google，Dara Khosrowshahi → 自动驾驶/Uber）。
+解析不到的领导人保留自身实体，留在默认板块，不丢条目。埃隆·马斯克没有单一品牌，仍是自动驾驶里的独立实体。
+因此「企业领导人」一栏在飞书里通常是空标题。不要把已经归到品牌下的领导人再挪回去。
 
-- **不设品牌配额**（`curation.py` 的 `CAP` 全为 `None`）。收录量由剔除规则决定，不由配额决定；
-  篇幅靠去重（尤其事件级去重）控制，而不是靠砍条数。
-- 海外板块：品牌 → 海外企业；领导人 → 企业领导人。
+| 顺序 | `section` | 内容 | 上限 |
+|------|-----------|------|------|
+| 一 | 国内企业 | 国内品牌，含已归入的国内领导人 | **无** |
+| 二 | 自动驾驶 | 自动驾驶品牌，含已归入的领导人；马斯克单独成实体 | **无** |
+| 三 | 海外企业 | 海外品牌，含已归入的海外领导人 | **无** |
+| 四 | 企业领导人 | 仅当领导人无法归入品牌时才有条目；现行表里通常为空 | **无** |
+
+- **不设品牌配额**（`curation.py` 的 `CAP` 全为 `None`）。收录量由剔除规则决定，不由配额决定。
+  定时命令不要加 `--event-dedup`。不同媒体对同一事件的报道都保留。
 - **归属一律只看标题**：摘要、关键词频次、正文均不参与，也没有任何回退（详见 §九）。
 - 同一篇报道**只归入一个板块 / 一个品牌**：按标题中最早出现的品牌名定唯一归属；
-  领导人命中人名时优先归「企业领导人」，国内/自动驾驶标题仍命中本板块品牌则不迁移。
+  领导人命中人名时归入其所属品牌（`leader_placement`），国内/自动驾驶标题仍命中本板块品牌则不迁移。
 
 ## 三、重点市场（白名单）
 
@@ -96,8 +101,18 @@
 
 - 海外企业：Alphabet/Google（含 Gemini/DeepMind）、Microsoft、Meta、Apple、Amazon、Nvidia、IBM、Intel、**Tesla**、**OpenAI（含 ChatGPT/GPT）**、**Anthropic（含 Claude）**、Mistral、Perplexity
 - 国内企业：阿里巴巴/通义千问/Qwen、字节跳动/抖音/豆包/火山引擎、腾讯/微信/混元、华为/深度求索/智谱/**月之暗面/Moonshot（含 Kimi）**/百川/零一万物/Manus/商汤/小米/美团/京东/拼多多/Temu 等
+- **国内芯片 / 存储 / 光模块**（2026-11-05 补入）：沐曦 MetaX、摩尔线程 Moore Threads、长鑫存储 CXMT、长江存储 YMTC、天数智芯 Iluvatar、壁仞科技 Biren、中际旭创 Innolight
 - 自动驾驶：Waymo、Cruise、Zoox、Wayve、Uber、文远知行、小马智行、小鹏、滴滴、Lyft、Cybercab
 - 领导人：Sundar Pichai、Satya Nadella、Sam Altman、Dario Amodei、Mark Zuckerberg、Jensen Huang、Tim Cook、Andy Jassy、Jeff Bezos、Elon Musk 等（含对应的国内/自动驾驶领导人）
+
+> ⚠️ **有译名 ≠ 能归类。**《翻译知识库》的 `品牌名称翻译知识库` 只负责翻译；真正决定一篇稿能不能归位的是
+> `filter3.py` 里的六个别名表。曾出现：CXMT / YMTC / Iluvatar / Biren / Innolight 在知识库里有中文名，
+> 但别名表未收录，稿件在归属环节被静默丢弃（日志无异常、报告里只是「少了几条」）。
+> **新增竞品的标准动作**：①加知识库品牌表 → ②加 `filter3.py` 别名表 → ③用一条真实标题验证能否归位 → ④重跑管线确认条数变化合理。
+>
+> **别名撞常见词/人名时**用 `!` 前缀写大小写敏感正则，如壁仞：
+> `!(?<![A-Za-z])(?:Biren|BIREN)(?![A-Za-z])(?!\s+Singh)` —— `Biren` 也是印度常见名（Biren Singh），
+> 不加排除会把政客新闻归到壁仞科技。全大写写法（`BIREN`）也要一并覆盖。
 
 > **产品名归公司，不单列实体**：ChatGPT / GPT → OpenAI；Claude → Anthropic；Kimi → 月之暗面/Moonshot；Gemini → Alphabet/Google。
 > 模型名、聊天机器人名一律视为所属公司的产品线，避免同一公司在报告中出现两个并列小节。
@@ -140,12 +155,12 @@
 
 ## 十、2026-11-04 二次修正（取消限额 · 事件去重 · 前瞻分板块）
 
-> 用户明确：**不设置数量限额**；**海外竞品剔除财报前瞻，自动驾驶与国内竞品保留**；洛杉矶时报加入媒体库。
+> 用户明确：**不设置数量限额**；**海外企业剔除财报前瞻，自动驾驶与国内企业保留**；洛杉矶时报加入媒体库。
 
 1. **取消每品牌限额**：`curation.py` 的 `CAP` 全部置为 `None`。收录量由「剔除规则」决定，不再由配额决定。
    踩过的坑：原 `CAP={'海外企业':5}` 使 Apple 96 条候选只进 5 条，Siri AI、Anthropic IPO、Nvidia 中国业务等 10 条重点稿被挤出。
 2. **财报前瞻分板块**：`topic_gate` 第 6 条改为仅当 `ovb` 命中且无 auto/dom 命中时才剔。
-   Uber/Xpeng 等自动驾驶前瞻（含 robotaxi 投入）与国内竞品前瞻一律保留。
+   Uber/Xpeng 等自动驾驶前瞻（含 robotaxi 投入）与国内企业前瞻一律保留。
 3. **事件级去重（`prep_final.py --per-event`，默认 1）**：同板块+同实体内，两条标题 Jaccard≥0.5
    或共享≥2 个「稀有实词」（该品牌候选内出现 ≤4 次）即判定同一事件，只保留最靠前一条。
    效果：「Google 关闭学校搜索」12 个版本→1 条；「OpenAI 聘前陆军部长」7 个版本→1 条。
@@ -229,7 +244,9 @@
 `NASA's moonshot to the Moon` ✗剔、`A moonshot plan to cure cancer` ✗剔、
 `moonshot thinking at Google X` ✗剔且正确归 Google。
 
-### 3. 同一事件的多篇报道相邻（`build_doc.py`）—— 从数据自动发现，无手工词表
+### 3. 同一事件的多篇报道相邻（维护方 Word 稿里的聚类；定时飞书不跑这一步）
+
+定时飞书发布脚本按影响力排序，只把规范化标题完全相同的条目放在一起。下面这套自动聚类不在定时命令里，不要为了它去改发布脚本。
 
 **早期做法已废弃**：曾用手写事件标签（`school_ai` / `mna` / `buyout` / `watch_audio`…）。
 问题很明确——标签是照着当期数据写的，换一批数据就失效，无法支撑每日生成。**已全部删除。**
@@ -264,8 +281,6 @@
 > （如 TeraWulf 数据中心融资挨着马来西亚投资）。这是纯词面方法的固有误差，
 > 代价远小于「同一事件被拆散」，且无需维护词表。
 
-定时飞书发布不跑 `build_doc.py`。发布脚本在每个品牌内仍按标题归组后按影响力排序，不会套用上面的自动分簇。分簇算法留在这里，供对照 Word 版的条目顺序。
-
 ### 4. 顺带修复
 
 `SRC_TO_KB` 补 `Nikkei Asian Review → Nikkei Asia`（原缺失，导致该媒体稿件被当作野媒体丢弃）。
@@ -299,9 +314,7 @@
 另修 `STOCK_MOVE_PAT`：原只匹配 `What's Going On With ... Stock`，补 `What Is/Are` 变体。
 另加 `Big Apple` 判定——标题含 `Big Apple` 且无 iPhone/Siri/Cupertino 等科技信号时，视为纽约市而非苹果公司。
 
-### 3. 事件去重加强（`prep_final.event_dedup`，需显式 `--event-dedup`）
-
-定时命令不带这个参数，默认保留各家媒体对同一事件的报道。下面的合并效果只在加上 `--event-dedup` 时出现。
+### 3. 事件去重加强（`prep_final.event_dedup`）
 
 原判据只认「Jaccard≥0.5」或「共享≥2 个稀有词」，遇到**各家换主语**的同事件报道会漏合：
 `Zohran Mamdani Accuses Google...` / `Bernie Sanders Accuses Google...` 只共享 `{accuses, school}`，
@@ -338,3 +351,193 @@
 
 效果：83 → **87 条**，救回上述 2 条独立新闻 + 2 条措辞差异较大的同事件稿
 （Oracle 腾讯交易的第 4 个版本、马来西亚投资的 2027/2028 表述）；学校政策仍保持合并，**未丢失任何原有条目**。
+
+## 十四、2026-11-05 三补：供应链价格 ≠ 零售促销
+
+补入 5 家国内芯片竞品（长鑫存储 CXMT、长江存储 YMTC、天数智芯 Iluvatar、壁仞科技 Biren、中际旭创 Innolight）时，
+用合成标题做端到端验证，发现两条既有规则会**吞掉这几家最核心的情报**：
+
+| 标题 | 原判定 | 问题 |
+|---|---|---|
+| `Memory chip price drop squeezes CXMT margins` | 剔（促销/折扣） | 存储价格战是 DRAM 厂商的核心情报 |
+| `GPU price hikes boost Biren's outlook` | 剔（消费硬件价格/规格） | 该规则本意是挡消费级显卡涨价 |
+| `Nvidia cuts GPU prices for China market` | 剔（消费硬件价格/规格） | 中国区定价是竞争动作 |
+
+根因：`PROMO_PAT` 里的裸 `price (?:drop|cut|slashes?)` 与 `消费硬件价格/规格` 里的 `\bgpu\b.{0,25}(price|hike|shortage)`
+都是按**零售促销**场景写的，没有区分「芯片/存储的批发价」和「整机的零售价」。
+
+**修法**：`supply_price_intel(head)` 守卫，同时满足三条才豁免——
+1. 出现价格变动（`price/pricing/cost` + drop/cut/hike/rise/surge/slump/decline/war，或 cut/drop/slash + prices）
+2. 出现供应链主体（`dram|nand|hbm|wafer|foundry|capacity|asp|contract|memory|chip|semiconductor|gpu|accelerator|optical module` 等）
+3. **不含消费电子整机**（`iphone|ipad|macbook|pixel|galaxy|airpods|apple watch|kindle|surface|console|ps5|xbox|buds` 等）
+
+第 3 条是关键：没有它，`iPhone 17 price drop after chip shortage eases` 会因为提到 chip 而被放过。
+
+同时修 IPO 首日：`SUBSTANTIVE_PAT` 补 `(?:trading|market|exchange)\s+debut`，
+`CXMT shares jump 20% in trading debut` 不再被判为纯股价波动（上市首日是公司事件）；
+`CXMT shares jump 20% on Tuesday` 这类日常涨跌仍会剔除。
+
+回归：两批真实数据条数不变（11-05 批 129/120/120、11-04 批 199/191/191），确认没有噪音回流。
+
+## 十五、2026-11-05 四补：新增 MarketWatch + 媒体名大小写
+
+### 1. 新增媒体 MarketWatch（第 61 家，现共 63 家）
+
+`marketwatch.com`（道琼斯旗下财经站）→ 英文 `MarketWatch` / 中文 `MarketWatch`（英文原名，同 Barron's、Benzinga 惯例）。
+`SRC_TO_KB` 同时补四种可能写法：`MarketWatch Online`、`MarketWatch.com`、`MarketWatch.com Online`、`Dow Jones MarketWatch`。
+
+**这批媒体偏股价/观点类**，用 20 条典型标题实测：保留 13、剔除 7。剔除的是大盘期货、荐股清单、
+`What's going on with ... stock`、财报前瞻、特斯拉电动车股价、促销、`iPhone 涨价`转述。保留的是
+芯片/存储报价、AI 战略、Robotaxi、并购、监管。
+
+### 2. 媒体名大小写不敏感回退（`src_norm`）
+
+导出会把同一家媒体写成不同大小写：`POLITICO` / `Politico`、`Tech in Asia` / `Tech In Asia`、
+`marketwatch` / `MarketWatch`。原实现只做精确匹配，这些稿件被当作未知媒体**静默丢弃**。
+11-04 批因此少了 3 条 Tech in Asia 稿（京东收购 Ceconomy、OpenAI 挖 Uber 高管、Nvidia 投资的 Cohere）。
+
+修法：精确 → 剥 `Online` → `SRC_TO_KB` → **小写索引回退**。
+前置检查：KB 内不存在「仅大小写不同」的重名，回退不会产生歧义。
+
+### 3. 顺带修三处漏判
+
+| 问题 | 原判定 | 修法 |
+|---|---|---|
+| `Amazon launches new AI model to rival OpenAI` | 剔（亚马逊非AI） | `AMAZON_KEEP` 补裸 `\bai\b`（原先只认 `artificial intelligence`） |
+| `Dow Jones futures fall as Fed decision looms` | 留（漏） | 大盘规则补 `(?:dow|nasdaq|s&p)\s+(?:jones\s+)?futures` |
+| `3 stocks to buy now and hold forever` | 留（漏） | 股评规则由 `stocks to watch` 扩为 `stocks to (watch|buy|own|hold|sell)` |
+
+回归影响：11-05 批 120→121、11-04 批 191→195。新增全部可核实为真实稿件
+（3 条 Tech in Asia + 1 条 Amazon 的 Anthropic AI 持仓），无噪音回流。
+
+## 十六、2026-11-05 五补：客户重点关注 Apple Intelligence（入华优先）
+
+客户第一优先关注 Apple Intelligence 的产品与政策动态，其中「入华」类关注度最高。实现分三层，
+`focus` 字段写在 curation 和 prep_final 的条目上。定时飞书发布脚本不读 `focus`，文档里的先后仍按 `impact`。能在飞书里看到的是归属：入华稿按标题里最早出现的实体留下，而不是被国内品牌优先规则整条搬走。
+
+### 1. 判定（`curation.apple_focus`，只看标题）
+
+| 等级 | 权重 | 判定 | 例子 |
+|---|---|---|---|
+| `apple_intel_cn` | **+4** | Apple 的 AI 载体（Apple Intelligence / Siri / Apple AI）+ 中国要素（`China`、`mainland`、`国行`、`CAC`/`网信办`、阿里/百度/腾讯/Qwen 等合作方） | `Apple Intelligence launches in China with Alibaba's Qwen model`、`Apple taps Baidu to power Siri in China`、`Apple Intelligence 国行版上线` |
+| `apple_intel` | **+2** | 其他 Apple Intelligence 动态：功能上线、Siri 改造、AI 代理风险、评测与使用技巧 | `Siri overhaul slips to 2027`、`Apple Intelligence review: useful but half-baked` |
+| — | 0 | 不含 Apple 的 AI 载体 | `Apple's China sales fall 12%`、`Apple Q4 earnings beat` |
+
+**关键排除：裸 `chinese` 不算入华。** `Apple Intelligence in Chinese language` 是全球语言支持，
+不是中国市场落地 —— 因此 `APPLE_CN_PAT` 要求 `chinese market/users/regulators/government/authorities/iphone`。
+（首版直接写了 `chinese`，把语言版稿误判成入华。）
+
+评测与使用技巧类**按客户要求保留并加权**，不视为低价值噪音。
+
+### 2. 排序
+
+`pscore` 和 `focus` 只影响 curation 在品牌内部的挑选顺序。`CAP` 为 `None`，所以加权不决定进不进报告。
+飞书文档由发布脚本按 `impact` 重排，入华稿不会因此被抬到品牌最前面。要核对 focus，看 `final.json` 里的 `focus` 字段，以及稿件落在哪个品牌下。
+
+### 3. 归属（`curation.unique_placement` + `prep_final` 重归位）
+
+focus 稿**按标题中最早出现的实体**归位，不套用「国内企业优先」。
+否则 `Apple Intelligence launches in China with Alibaba's Qwen model` 会被整条挪进「国内企业/阿里巴巴」，
+Apple 板块看不到最关键的入华动态。
+
+**两处都要改**：`prep_final` 第 1 步「归属唯一化」有一份自己的逻辑（领导人优先），
+若不加同样的 focus 分支，会把 curation 已归到 Apple 的稿子重新挪回领导人板块
+（实测 `Apple's Siri AI Could Become a Paid…CEO John Ternus` 被改回 John Ternus）。
+
+### 4. 已知的连带影响
+
+含 Apple AI 的跨品牌稿，会在其所属板块内也被提前，例如
+`What Nvidia and Apple's Tug-of-War Says About the AI Trade`（Nvidia 板块）、
+`AMD Earnings To Test Whether PC Weakness Is Intel-Specific, Apple's AI…`（Intel 板块）。
+这是有意为之：只要讲 Apple Intelligence 就享受优先度。条数不变，仅位置变化。
+
+## 十七、2026-11-06 批次：12 类新增噪音 + 两处结构性 bug
+
+### 1. 新增 12 类剔除（均只看标题）
+
+| 规则 | 剔除对象 | 触发写法 |
+|---|---|---|
+| 散户股价推算/择时 | 教人算收益、猜底、择时 | `if you invested $`、`cheaper than a toilet-paper company`、`options traders`、`what history suggests is the floor`、`buy X or Y?`、`look like bargains`、`Cathie Wood buys`、`^Opinion \|` |
+| intel=情报 | 把「情报」当 Intel 公司 | `intel report`、`in intel`、`intel community` |
+| 本地商家好评软文 | Google Reviews 实为本地商家 SEO | `google reviews recognize … home sellers` |
+| 罪案/司法花边 | 与业务无关的个案 | `found guilty for threatening`、`murder-for-hire`、`catches thief`、`home invasion` |
+| 致富教程/副业指南 | 变现教程 | `turn your … into a $100,000 business` |
+| 娱乐/职业转型花边 | 网红转行 | `made the move from TikTok to TV` |
+| 软件bug/更新日志 | 补丁与 changelog | `copy-paste bug`、`excel 2016`、`seasonal clock change` |
+| 富豪榜/地产花边 | 身家排名 | `billionaire rankings`、`created 5 billionaires`、`drops to no. 9 in`、`billionaire magnet` |
+| 通稿/SEO换皮 | 小站转载与上架贴 | `Xinhua Silk Road`、`AIVideoFree`、`integrates OpenAI … a day after` |
+| 怀旧开箱/复古测评 | nostalgia 内容 | `back to unboxing`、`unboxing a GeForce` |
+| 个人使用技巧 | 个人设备用法（**排除 AI**） | `how I use my …`、`how to use your …`，前置负向前瞻排除 `apple intelligence / siri / ai` |
+| 社媒使用场景/公益 | 平台被使用而非平台经营 | `missionaries take to TikTok`、`church`、`charity drive` |
+| 第一人称走访/见闻 | 现场随笔 | `^I went to`、`everyone talked about` |
+
+### 2. 强政治判据（`STRONG_POLITICS_PAT`）
+
+政治叙事此前靠 `POLITICS_PAT` + `BUSINESS_SIGNAL_PAT` 两级判断，但商业信号词太宽（含 `\bai\b`、`lawsuit`、股价代码），
+于是「马斯克在中期选举惨败后回击民主党 AI 监管」凭一个 `AI` 就过关。现加一级**强政治**判据，命中即剔、
+不受商业信号豁免：`midterm rout` / `persecut` / `governor-elect` / `spent at least $X million in` /
+`lawyer up` / `\bdoge\b` / `loses billions`。
+
+**刻意不含裸 `after the midterm`** —— 那会误伤「选举后特斯拉、SpaceX 股价为何下跌」这类市场影响稿，此前已确认保留。
+
+### 3. 两处结构性 bug（都不是规则问题）
+
+**a) 领导人实体吞掉品牌稿（严重）**
+
+`aliases_of` 对非领导人实体按 `/` 和括号整体切分，于是 `Dara Khosrowshahi (Uber)`
+产生别名 `uber`，**所有 Uber 标题都命中该领导人**。而 `unique_placement` 在位置并列时只按 `min(hits, key=位置)` 取，
+顺序取决于 `set` 的遍历顺序 —— 同一批数据两次运行，Uber 的 9 条稿可能在 `Uber` 和 `Dara Khosrowshahi` 之间漂移。
+
+修法：括号仅出现在领导人实体上（三个品牌表均无括号），故以括号为领导人标记，括号内公司名不作别名；
+并列排序改为 `(位置, 品牌优先, 实体名)`。`curation.py` 与 `prep_final.py` 各有一份 `aliases_of`，两处同步。
+
+**b) 媒体映射指向不存在的媒体**
+
+给地方台补映射时写了 `'WABC-TV Online': 'ABC News'`，但 KB 没有 ABC News。原 `src_norm` 直接返回映射值、
+不校验，于是「未知媒体」照样通过白名单闸门进报。现改为目标必须在 KB 内，否则返回 None，并在启动时打印
+`WARNING: SRC_TO_KB 指向不存在的媒体`。
+
+### 4. 本批结果
+
+436 条原始 → 166 候选 → 147 条；首版（未加规则）为 182 条，其中约 35 条属上述噪音。
+
+## 十八、2026-11-06 口径调整：领导人归入品牌 + 自动驾驶垂媒
+
+### 1. 领导人归入所属品牌
+
+飞书文档仍印四个标题。能解析到品牌的领导人写入该品牌的 `section`（国内企业 / 自动驾驶 / 海外企业），第四栏「企业领导人」通常没有条目。不要改发布脚本去删掉第四个标题。
+
+实现：`filter3.leader_placement()` 把领导人实体解析成所属品牌 `(板块, 品牌)`。
+- 实体名带括号的（`Sundar Pichai (Alphabet/Google)`）直接取括号内公司；`DeepMind`/`AWS` 这类非 canon 名
+  经 `LEADER_PARENT_ALIAS` 归一。
+- 实体名不带括号的国内领导人靠 `LEADER_PARENT` 显式指定（马云 → 阿里巴巴 …）。
+- `埃隆·马斯克/Elon Musk` 无单一品牌（Tesla/SpaceX/X/xAI），保留为独立实体，仍在自动驾驶板块。
+- 解析不到的领导人退回自身实体，**不丢条目**。
+
+领导人匹配仍然承担「救回归属」的作用：标题只提人名（`Sundar Pichai says…`）时，靠领导人命中把稿件放到其品牌下。
+
+### 2. 新增两家自动驾驶垂媒（媒体库 61 → 63）
+
+| 英文 | 中文 | 域名 |
+|---|---|---|
+| InsideEVs | InsideEVs | insideevs.com |
+| Electrek | Electrek | electrek.co |
+
+`SRC_TO_KB` 兼容 `InsideEVs.com` / `Inside EVs` / `InsideEVs Online` / `Electrek.co` / `Electrek Online`。
+
+> 注意：这两家以特斯拉与电动车产品为主，其 EV 类标题仍会被既有的「特斯拉非重点（EV/股价/销量）」规则剔除，
+> 实际进报的主要是 robotaxi / 自动驾驶 / 车队合作类稿件。这是既有口径，不是新问题。
+
+### 3. 媒体标准写法：`Tech in Asia`
+
+KB 内原写法 `Tech In Asia` 统一为 **`Tech in Asia`**；`SRC_TO_KB` 保留旧写法映射，历史导出仍可识别。
+
+### 4. 领导人补充（2026-11-06）
+
+| 领导人 | 归属 | 说明 |
+|---|---|---|
+| Bill Gates | Microsoft | 原已在表内（`Bill Gates (Microsoft)`），解析路径正确 |
+| **Eric Schmidt** | Alphabet/Google | **新增**。谷歌前 CEO/董事长；同时补入《翻译知识库》领导人表（埃里克·施密特） |
+
+`Eric Schmidt` 只收全名 `eric schmidt`，**不收裸 `Schmidt`** —— 德语姓氏过于常见
+（Helmut Schmidt、Schmidt hammer lassen 等），加裸姓会误收无关政治/建筑新闻。
