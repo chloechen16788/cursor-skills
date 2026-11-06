@@ -139,9 +139,19 @@ def _send_message(token: str, msg_type: str, content: dict) -> None:
 
 
 def _upload_media_type(path: Path) -> str:
-    if path.suffix.lower() == ".xlsx":
+    suffix = path.suffix.lower()
+    if suffix == ".xlsx":
         return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    if suffix == ".docx":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     return "text/csv"
+
+
+def _feishu_file_type(path: Path) -> str:
+    """飞书 im 上传的 file_type。docx 用 doc，其余沿用原来的 stream。"""
+    if path.suffix.lower() in {".doc", ".docx"}:
+        return "doc"
+    return "stream"
 
 
 def _upload_file(token: str, path: Path) -> str:
@@ -154,7 +164,7 @@ def _upload_file(token: str, path: Path) -> str:
     prefix = (
         f"--{boundary}\r\n"
         'Content-Disposition: form-data; name="file_type"\r\n\r\n'
-        "stream\r\n"
+        f"{_feishu_file_type(path)}\r\n"
         f"--{boundary}\r\n"
         'Content-Disposition: form-data; name="file_name"\r\n\r\n'
         f"{filename}\r\n"
