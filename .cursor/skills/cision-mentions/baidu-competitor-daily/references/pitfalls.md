@@ -81,6 +81,11 @@
 
 | 66 | 缺列崩溃不止 filter3 一处 | 修好 filter3 的 `col()` 后，`curation.py` 的 `load_raw()` 仍因 `content` 列缺失抛 KeyError —— 同一模式的重复实现分散在多个脚本 | 三个脚本的 `col()` 统一改为缺列返回空串。新增脚本若读 xlsx，必须检查是否有同样的直接索引 |
 | 67 | 领导人裸姓会误收 | `Schmidt` 是常见德语姓氏，若按 `Nadella`/`Pichai` 的短名风格给 Eric Schmidt 也加裸姓，会收进 Helmut Schmidt、建筑事务所等无关新闻 | 只收全名 `eric schmidt`。加领导人别名前先想一遍该姓是否常见 |
+| 68 | 国会/议会词把监管新闻当政治 | `Nvidia's Huang is asked to brief Congress on reported Chinese spy relationship` 因标题含 `Congress` 命中 `POLITICS_PAT`，且 `BUSINESS_SIGNAL_PAT` 没有对应产业词（标题无 chip/AI/lawsuit），被判「纯政治评论」剔除 | 新增 `INSTITUTION_ACTION_PAT`（要求作证/简报/传唤/听证）+ `has_brand`：**机构动作 + 已识别品牌** 时不算政治评论。选举叙事无机构动作，仍正常剔除 |
+| 69 | `campaign` 缺词边界误伤 campaigners | 裸 `campaign` 匹配到 `campaigners`（活动人士），`Google refused 54K-name petition, say campaigners` 被当成竞选稿剔除 | 改为 `campaigns?\b`。凡是用作「政治语境」的英文词（campaign/poll/vote），都要检查是否会命中同根的其他词 |
+| 70 | 中国相关科技稿被品牌门控误剔 | 客户要求「这些品牌在芯片/AI/自动驾驶/无人驾驶/Robotaxi/中美科技监管方面与中国相关的报道必须收录」，但各品牌门控只看单点特征：`Tesla's China sales of FSD cars climb as robotaxi pilot expands` 命中 `TESLA_DROP`（sales）；`Amazon cuts China cloud prices...` 命中「亚马逊非 AI」；`Nvidia loses billions in China as export curbs bite` 命中 `STRONG_POLITICS_PAT`（loses billions） | 新增 `china_tech_focus()`（中国信号 + 科技议题，仅标题）：在 `topic_gate` 里豁免品牌门控、在 `exclusion_reason` 里豁免强政治判据，`curation` 再给 `pscore` 加 2。不写入 `focus`，飞书和 Word 的品牌内顺序不变。`filter3` 与 `curation` 各有一份正则，必须同步改 |
+| 71 | 知识库有译名、别名表没收录 = 静默丢弃 | `云徙科技 Yunxi Technology` 一直在《翻译知识库》品牌表里，但 `DOMESTIC_BRANDS` 漏收；该公司的稿件在归属环节被丢弃，日志毫无异常 | `filter3.py` 启动时对比 KB 品牌表与别名表，把没有对应别名的品牌打印成 `WARNING`（`Cruise`、`Robotaxi`、`Cybercab` 属预期，已列入跳过名单）。修法是把品牌补进别名表，而不是只看 KB |
+| 72 | `--drops` 缺失导致「该收未收」无从查证 | 每次用户问「这条为什么没收录」，只能人工猜是哪条规则；早期为此反复误判 | `filter3.py --drops drops.json` 会导出每条被剔稿件的 `reason`、命中的品牌与 `cn_tech` 标记，并按原因聚合打印。排查顺序：先看原因分布，再按品牌/关键词过滤。定时命令不传这个参数 |
 
 
 ## 额外注意事项

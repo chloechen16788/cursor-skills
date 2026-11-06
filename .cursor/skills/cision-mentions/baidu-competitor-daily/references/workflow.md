@@ -39,9 +39,17 @@ python scripts/csv_to_delta.py --input delta.csv --out delta.xlsx
 python scripts/filter3.py \
   --input "/path/delta-bodies.xlsx" \
   --kb   "/path/翻译知识库.xlsx" \
-  --out  candidates.json
+  --out  candidates.json \
+  --drops drops.json
 ```
 输出 `CANDIDATE COUNT` 及各板块命中统计。归属只看标题。媒体已在知识库里的，不因所在国被丢掉。
+
+`--drops` 可选。定时命令不传它。排查「这条为什么没收」时加上：每条被剔稿件的原因、命中品牌和 `cn_tech` 会写入 json，并按原因汇总打印。
+
+启动日志里有两类 `WARNING`，出现就要处理：
+
+- `SRC_TO_KB 指向不存在的媒体`：映射写错，该写法不会生效。
+- `知识库里这些品牌没有对应的别名表条目`：有译名但收不进来，补 `filter3.py` 别名表。`Cruise`、`Robotaxi`、`Cybercab` 是预期跳过。
 
 **Step 2 — 优先级评分 + 唯一归属 + 去重**
 ```bash

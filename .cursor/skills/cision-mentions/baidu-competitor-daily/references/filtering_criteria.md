@@ -103,6 +103,7 @@
 - 海外企业：Alphabet/Google（含 Gemini/DeepMind）、Microsoft、Meta、Apple、Amazon、Nvidia、IBM、Intel、**Tesla**、**OpenAI（含 ChatGPT/GPT）**、**Anthropic（含 Claude）**、Mistral、Perplexity
 - 国内企业：阿里巴巴/通义千问/Qwen、字节跳动/抖音/豆包/火山引擎、腾讯/微信/混元、华为/深度求索/智谱/**月之暗面/Moonshot（含 Kimi）**/百川/零一万物/Manus/商汤/小米/美团/京东/拼多多/Temu 等
 - **国内芯片 / 存储 / 光模块**（2026-11-05 补入）：沐曦 MetaX、摩尔线程 Moore Threads、长鑫存储 CXMT、长江存储 YMTC、天数智芯 Iluvatar、壁仞科技 Biren、中际旭创 Innolight
+- **云徙科技 Yunxi Technology**（2026-11-06 补入）：知识库里一直有译名但别名表漏收，稿件被静默丢弃
 - 自动驾驶：Waymo、Cruise、Zoox、Wayve、Uber、文远知行、小马智行、小鹏、滴滴、Lyft、Cybercab
 - 领导人：Sundar Pichai、Satya Nadella、Sam Altman、Dario Amodei、Mark Zuckerberg、Jensen Huang、Tim Cook、Andy Jassy、Jeff Bezos、Elon Musk 等（含对应的国内/自动驾驶领导人）
 
@@ -110,6 +111,8 @@
 > `filter3.py` 里的六个别名表。曾出现：CXMT / YMTC / Iluvatar / Biren / Innolight 在知识库里有中文名，
 > 但别名表未收录，稿件在归属环节被静默丢弃（日志无异常、报告里只是「少了几条」）。
 > **新增竞品的标准动作**：①加知识库品牌表 → ②加 `filter3.py` 别名表 → ③用一条真实标题验证能否归位 → ④重跑管线确认条数变化合理。
+> 2026-11-06 起 `filter3.py` 启动时会把「知识库里有、别名表里没有」的品牌直接打印成 `WARNING`，
+> 这类静默丢弃从此会暴露在运行日志里（`Cruise` 与 `Robotaxi`/`Cybercab` 等品类行属预期，已排除）。
 >
 > **别名撞常见词/人名时**用 `!` 前缀写大小写敏感正则，如壁仞：
 > `!(?<![A-Za-z])(?:Biren|BIREN)(?![A-Za-z])(?!\s+Singh)` —— `Biren` 也是印度常见名（Biren Singh），
@@ -542,3 +545,67 @@ KB 内原写法 `Tech In Asia` 统一为 **`Tech in Asia`**；`SRC_TO_KB` 保留
 
 `Eric Schmidt` 只收全名 `eric schmidt`，**不收裸 `Schmidt`** —— 德语姓氏过于常见
 （Helmut Schmidt、Schmidt hammer lassen 等），加裸姓会误收无关政治/建筑新闻。
+
+### 5. 政治规则的第三次收紧：机构动作豁免（2026-11-06）
+
+用户指出 `CNBC: Nvidia's Huang is asked to brief Congress on reported Chinese spy relationship` 未收录。
+追查：标题含 `Congress` → 命中 `POLITICS_PAT`；`BUSINESS_SIGNAL_PAT` 无对应词（不含 chip/AI/lawsuit 等）
+→ 判「纯政治评论」剔除。
+
+**这是误剔。** 国会/议会针对本公司的实质动作（要求作证、简报、传唤、听证）是监管与地缘政治议题，
+正是核心竞争情报。原规则的漏洞在于：`POLITICS_PAT` 里 `\bsenate\b|\bcongress\b` 与选举词混在一起，
+而 `BUSINESS_SIGNAL_PAT` 只认产业词、不认「公司被监管机构传唤」这一事实。
+
+**修法**：新增 `INSTITUTION_ACTION_PAT`
+
+```
+(asked|called on|urged|summoned|invited) to (brief|testify|appear)
+(seek|seeks|seeking|requested) (a) briefing
+(brief|briefing|testimony|testify) (congress|lawmakers|senate)
+testify | subpoena* | congressional hearing | senate hearing | hearing before
+appear(ed) before (congress|senate|lawmakers)
+```
+
+政治判断改为三条件：命中政治词 **且** 无商业信号 **且** **不是**（命中品牌 + 机构动作）→ 才判纯政治。
+`exclusion_reason()` 因此新增 `has_brand` 参数（主循环传入品牌命中结果）。
+
+**同时修 `campaign` 缺词边界**：裸 `campaign` 会匹配 `campaigners`（活动人士），
+导致 `Google refused 54K-name petition, say campaigners` 被当成选举稿剔除。改为 `campaigns?\b`。
+
+## 十九、2026-11-06 补充：中国相关科技议题一律收录
+
+**客户口径**：这些品牌（三个板块全部 tracked 品牌）在**芯片、AI、自动驾驶、无人驾驶、Robotaxi、
+中美科技监管**方面**与中国相关**的报道，必须收录。
+
+### 判据（只看标题）
+
+`filter3.china_tech_focus(head)` = 中国信号 **且** 科技议题信号：
+
+| 类别 | 关键词（节选） |
+|---|---|
+| 中国信号 | `China / Chinese / Beijing / PRC / mainland / Hong Kong / Taiwan / Shanghai / Shenzhen / Hangzhou`、`CAC / 网信办 / 工信部 / 商务部`、`rare earth`、以及中国公司名本身（`Huawei / BYD / SMIC / YMTC / CXMT / Alibaba / Tencent / ByteDance / Xiaomi / Baidu / DeepSeek / Moonshot / Qwen / Zhipu / MiniMax / SenseTime / Innolight / MetaX / Moore Threads / Iluvatar`）|
+| 科技议题 | `chip / semiconductor / foundry / HBM / DRAM / wafer / GPU`、`AI / LLM / model / agent`、`autonomous / self-driving / driverless / robotaxi / FSD`、`regulation / export control / entity list / antitrust / tariff / Congress / hearing` |
+
+### 三道效果
+
+1. **豁免各品牌话题门控**（`topic_gate`）。原口径下这些稿会被品牌门控误剔：
+   - `Tesla's China sales of FSD cars climb as robotaxi pilot expands` → 命中 `TESLA_DROP`（sales）
+   - `Amazon cuts China cloud prices to counter Alibaba's Qwen` → 命中「亚马逊非 AI」
+   - `Uber Eats expands in China with robotaxi pilot` → 命中「Uber/Lyft 外卖」
+2. **豁免「政治攻防」判据**（`STRONG_POLITICS_PAT`）。
+   `Nvidia loses billions in China as export curbs bite` 会命中 `loses billions`，
+   但它恰恰是中国市场最核心的情报。选举类叙事不受影响（不含中国科技信号）。
+3. **加权 +2**（`curation.FOCUS_CN_TECH`）：加在 `pscore` 上，**不写入 `focus`**。
+   `prep_final` 里同一规范化标题的分组会受这个分数影响。飞书和 Word 的品牌内展示仍只看
+   Apple Intelligence 的 `focus` 和事件簇影响力，不会因为这 2 分把中国科技稿抬到品牌最前。
+   单独的中国科技 `focus` 先不做，与当前外部包的代码一致。筛选说明里仍写「在该品牌下优先展示」，这句话沿用外部包原文。
+
+> 两处正则 `filter3.CHINA_SIGNAL_PAT/CHINA_TECH_PAT` 与 `curation.CN_SIGNAL_PAT/CN_TECH_PAT` 是
+> **故意重复**的：filter3 决定「收不收」，curation 决定「`pscore` 加不加 2」。改一处必须改另一处，
+> 否则会出现「保留了却没加权」或「加权了却没保留」的静默不一致。
+
+### 边界
+
+- 加密货币仍按原口径剔除（即使带中国信号）。
+- 无品牌归属的标题仍不进报（归属只看标题，这是既有铁律）。
+- 纯中国宏观稿（`China's GDP slows`）不含 tracked 品牌 → 本来就不在归属范围内。
