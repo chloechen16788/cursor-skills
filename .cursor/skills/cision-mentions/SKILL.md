@@ -213,7 +213,7 @@ python3 .cursor/skills/cision-mentions/baidu-competitor-daily/scripts/make_zh_te
 2. `curation.py`：先按标题做唯一归属，再套用每品牌限额。海外企业每品牌最多 5 条，企业领导人每人最多 8 条，国内企业和自动驾驶每个实体最多 50 条。
 3. `prep_final.py`：再按标题定归属，并按 URL 去重。`idx` 顺序就是报告顺序。
 4. 只根据标题填写 `zh.json`，不要读正文，也不要打印正文。媒体、品牌、领导人译名与知识库一一对应。`len(zh) == len(final)`。
-5. 运行发布脚本。它会解析 wiki 节点 `PP88weeBdi1Pcgkmpxbc48lSn5e` 的真实 docx token，先清空文档正文，再写入两行式日报（英文媒体加超链接标题，下一行是中文媒体和中文标题）。不要删除这个 wiki 节点，也不要改成别的文档。
+5. 运行发布脚本。它会解析 wiki 节点 `PP88weeBdi1Pcgkmpxbc48lSn5e` 的真实 docx token，先清空文档正文，再按样例版式写入。三个一级标题是「一、国内竞品（含领导人）」「二、自动驾驶竞品（含领导人）」「三、海外竞品（含领导人）」；没有条目的栏目不印标题。品牌是二级标题。英文行整行加粗，半角冒号，整行链到原文。中文行整行加粗，全角冒号，不带链接。同事件的报道排在一起，Apple Intelligence 入华排在该品牌前面。不要删除这个 wiki 节点，也不要改成别的文档，也不要再手改版式。
 
 ```bash
 python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
