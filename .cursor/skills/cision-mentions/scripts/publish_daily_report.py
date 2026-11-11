@@ -72,7 +72,9 @@ def report_notice(data_date: str, counts: dict[str, int]) -> str:
 
 def data_date_from_after(after: str) -> str:
     try:
-        moment = datetime.strptime(after, "%Y-%m-%dT%H:%M:%S.000Z").replace(tzinfo=timezone.utc)
+        moment = datetime.strptime(after, "%Y-%m-%dT%H:%M:%S.000Z").replace(
+            tzinfo=timezone.utc
+        )
     except ValueError as error:
         raise RuntimeError(f"窗口起点无法解析，未改文档：{after}") from error
     return moment.astimezone(cision_lib.SHANGHAI).date().isoformat()
@@ -123,7 +125,9 @@ def load_zh(path: Path, final: list[dict]) -> dict[int, str]:
                 found[index] = str(item)
     elif isinstance(raw, dict):
         for key, value in raw.items():
-            found[int(key)] = value.get("zh", "") if isinstance(value, dict) else str(value)
+            found[int(key)] = (
+                value.get("zh", "") if isinstance(value, dict) else str(value)
+            )
     else:
         raise RuntimeError("zh.json 格式无法读取，未改文档")
     missing = [item["idx"] for item in final if not found.get(item["idx"], "").strip()]
@@ -132,7 +136,9 @@ def load_zh(path: Path, final: list[dict]) -> dict[int, str]:
     return {item["idx"]: found[item["idx"]] for item in final}
 
 
-def prepare(final_path: Path, zh_path: Path, kb_path: Path) -> tuple[list[dict], dict[int, str], dict[str, str], dict[str, str]]:
+def prepare(
+    final_path: Path, zh_path: Path, kb_path: Path
+) -> tuple[list[dict], dict[int, str], dict[str, str], dict[str, str]]:
     import openpyxl
 
     final = json.loads(final_path.read_text(encoding="utf-8"))
@@ -150,7 +156,9 @@ def prepare(final_path: Path, zh_path: Path, kb_path: Path) -> tuple[list[dict],
         hits = []
         lowered = title.lower()
         for alias, sec, ent in alias_index:
-            match = re.search(r"(?<![a-z0-9])" + re.escape(alias) + r"(?![a-z0-9])", lowered)
+            match = re.search(
+                r"(?<![a-z0-9])" + re.escape(alias) + r"(?![a-z0-9])", lowered
+            )
             if match:
                 hits.append((match.start(), sec, ent))
         return hits
@@ -180,12 +188,20 @@ def prepare(final_path: Path, zh_path: Path, kb_path: Path) -> tuple[list[dict],
     media_cn: dict[str, str] = {}
     for row in workbook["媒体名称知识库"].iter_rows(min_row=2, values_only=True):
         if row[0]:
-            media_cn[str(row[0]).strip()] = str(row[1]).strip() if row[1] is not None else str(row[0]).strip()
+            media_cn[str(row[0]).strip()] = (
+                str(row[1]).strip() if row[1] is not None else str(row[0]).strip()
+            )
     leader_cn: dict[str, str] = {}
     for row in workbook["领导人名称翻译知识库"].iter_rows(min_row=2, values_only=True):
         if row[0]:
-            leader_cn[str(row[0]).strip()] = str(row[1]).strip() if row[1] is not None else str(row[0]).strip()
-    leader_cn = {key: value for key, value in leader_cn.items() if value and value.lower() != key.lower()}
+            leader_cn[str(row[0]).strip()] = (
+                str(row[1]).strip() if row[1] is not None else str(row[0]).strip()
+            )
+    leader_cn = {
+        key: value
+        for key, value in leader_cn.items()
+        if value and value.lower() != key.lower()
+    }
     for key, value in leader_cn.items():
         if " " not in key:
             continue
@@ -222,12 +238,75 @@ def _leader_heading(ent: str, leader_cn: dict[str, str]) -> str:
 _EVENT_OVERLAP = 0.5
 _EVENT_CAP = 0.55
 _EV_GROUP_STOP = {
-    "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "has", "have",
-    "will", "its", "his", "her", "not", "but", "you", "can", "how", "why", "what", "who", "out",
-    "new", "more", "says", "said", "into", "over", "after", "amid", "about", "than", "then",
-    "they", "their", "inc", "nasdaq", "nyse", "stock", "stocks", "shares", "report", "reports",
-    "now", "just", "still", "first", "could", "would", "may", "might", "one", "two", "three",
-    "is", "be", "to", "of", "in", "on", "at", "as", "by", "or", "an", "a",
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "are",
+    "was",
+    "were",
+    "has",
+    "have",
+    "will",
+    "its",
+    "his",
+    "her",
+    "not",
+    "but",
+    "you",
+    "can",
+    "how",
+    "why",
+    "what",
+    "who",
+    "out",
+    "new",
+    "more",
+    "says",
+    "said",
+    "into",
+    "over",
+    "after",
+    "amid",
+    "about",
+    "than",
+    "then",
+    "they",
+    "their",
+    "inc",
+    "nasdaq",
+    "nyse",
+    "stock",
+    "stocks",
+    "shares",
+    "report",
+    "reports",
+    "now",
+    "just",
+    "still",
+    "first",
+    "could",
+    "would",
+    "may",
+    "might",
+    "one",
+    "two",
+    "three",
+    "is",
+    "be",
+    "to",
+    "of",
+    "in",
+    "on",
+    "at",
+    "as",
+    "by",
+    "or",
+    "an",
+    "a",
 }
 _FOCUS_RANK = {"apple_intel_cn": 0, "apple_intel": 1}
 _FOCUS_NORMAL = 2
@@ -252,14 +331,19 @@ def _discover_events(items: list[dict]) -> list[list[dict]]:
             by_word[word].add(index)
     upper = max(2, int(count * 0.8))
     cap = max(3, int(count * _EVENT_CAP))
-    candidates = {word: hits for word, hits in by_word.items() if 2 <= len(hits) <= upper}
+    candidates = {
+        word: hits for word, hits in by_word.items() if 2 <= len(hits) <= upper
+    }
     clusters: list[dict[str, set[int]]] = []
     for word in sorted(candidates, key=lambda item: (-len(candidates[item]), item)):
         titles = candidates[word]
         target = None
         for cluster in clusters:
             overlap = len(titles & cluster["titles"])
-            if overlap and overlap / min(len(titles), len(cluster["titles"])) >= _EVENT_OVERLAP:
+            if (
+                overlap
+                and overlap / min(len(titles), len(cluster["titles"])) >= _EVENT_OVERLAP
+            ):
                 if len(cluster["titles"] | titles) <= cap:
                     target = cluster
                     break
@@ -269,7 +353,10 @@ def _discover_events(items: list[dict]) -> list[list[dict]]:
         absorbed = False
         for cluster in clusters:
             overlap = len(titles & cluster["titles"])
-            if overlap and overlap / min(len(titles), len(cluster["titles"])) >= _EVENT_OVERLAP:
+            if (
+                overlap
+                and overlap / min(len(titles), len(cluster["titles"])) >= _EVENT_OVERLAP
+            ):
                 absorbed = True
                 break
         if not absorbed:
@@ -286,11 +373,24 @@ def _discover_events(items: list[dict]) -> list[list[dict]]:
             grouped.append([items[index]])
 
     def focus_rank(cluster: list[dict]) -> int:
-        return min(_FOCUS_RANK.get(str(item.get("focus") or ""), _FOCUS_NORMAL) for item in cluster)
+        return min(
+            _FOCUS_RANK.get(str(item.get("focus") or ""), _FOCUS_NORMAL)
+            for item in cluster
+        )
 
-    grouped.sort(key=lambda cluster: (focus_rank(cluster), -max(item["impact"] for item in cluster)))
+    grouped.sort(
+        key=lambda cluster: (
+            focus_rank(cluster),
+            -max(item["impact"] for item in cluster),
+        )
+    )
     for cluster in grouped:
-        cluster.sort(key=lambda item: (_FOCUS_RANK.get(str(item.get("focus") or ""), _FOCUS_NORMAL), -item["impact"]))
+        cluster.sort(
+            key=lambda item: (
+                _FOCUS_RANK.get(str(item.get("focus") or ""), _FOCUS_NORMAL),
+                -item["impact"],
+            )
+        )
     return grouped
 
 
@@ -318,44 +418,70 @@ def build_blocks(
     raw_count: int,
 ) -> tuple[list[dict], dict[str, int]]:
     del data_date  # 日期只出现在群消息里，样例文档正文不写数据日期
-    missing = sorted({item["media_kb"] for item in final if item.get("media_kb") not in media_cn})
+    missing = sorted(
+        {item["media_kb"] for item in final if item.get("media_kb") not in media_cn}
+    )
     if missing:
         raise RuntimeError("终稿媒体不在翻译知识库中，未改文档：" + ", ".join(missing))
-    groups: OrderedDict[str, dict[str, list[dict]]] = OrderedDict((sec, defaultdict(list)) for sec in SECTIONS)
+    groups: OrderedDict[str, dict[str, list[dict]]] = OrderedDict(
+        (sec, defaultdict(list)) for sec in SECTIONS
+    )
     for item in final:
         groups[item["section"]][item["entity"]].append(item)
     raw_label = str(raw_count) if raw_count else "—"
     blocks = [
-        _text_block([
-            _text_run(f"原始记录 {raw_label} 条，筛选入报告 {len(final)} 条（同一报道仅归入一个板块）")
-        ]),
-        _text_block([
-            _text_run("筛选说明：", bold=True),
-            _text_run(
-                "仅保留重点市场（中国、美国、英国、中东等）报道，且本期仅收录英文稿件；媒体来源限定于《翻译知识库》「媒体名称知识库」所列媒体，其余来源不收录。"
-                "已剔除 Windows/安卓补丁、手机/电脑硬件、医药/音箱、纯电商物流、非重点市场（法/意/德/日/新等）、低价值通稿与分析师评级类内容；"
-                "亦剔除加密货币、财报前瞻（实际业绩保留）、纯股价波动快讯，以及星链/SpaceX/推特、电动车换代、外卖等非重点话题。"
-            ),
-        ]),
+        _text_block(
+            [
+                _text_run(
+                    f"原始记录 {raw_label} 条，筛选入报告 {len(final)} 条（同一报道仅归入一个板块）"
+                )
+            ]
+        ),
+        _text_block(
+            [
+                _text_run("筛选说明：", bold=True),
+                _text_run(
+                    "仅保留重点市场（中国、美国、英国、中东等）报道，且本期仅收录英文稿件；媒体来源限定于《翻译知识库》「媒体名称知识库」所列媒体，其余来源不收录。"
+                    "已剔除 Windows/安卓补丁、手机/电脑硬件、医药/音箱、纯电商物流、非重点市场（法/意/德/日/新等）、低价值通稿与分析师评级类内容；"
+                    "亦剔除加密货币、财报前瞻（实际业绩保留）、纯股价波动快讯，以及星链/SpaceX/推特、电动车换代、外卖等非重点话题。"
+                ),
+            ]
+        ),
     ]
     counts = {sec: 0 for sec in SECTIONS}
     for sec in SECTIONS:
         if not groups[sec]:
             continue
         blocks.append(_heading(1, SECTION_TITLE[sec]))
-        entities = sorted(groups[sec].items(), key=lambda pair: -max(item["impact"] for item in pair[1]))
+        entities = sorted(
+            groups[sec].items(),
+            key=lambda pair: -max(item["impact"] for item in pair[1]),
+        )
         for ent, items in entities:
             heading = _leader_heading(ent, leader_cn) if sec == "企业领导人" else ent
             blocks.append(_heading(2, heading))
             for item in _ordered_items(items):
                 media = str(item["media_kb"])
                 title = str(item["title"]).strip()
-                blocks.append(_text_block([
-                    _text_run(f"{media}: {title}", bold=True, url=str(item["url"])),
-                ]))
-                blocks.append(_text_block([
-                    _text_run(_media_cn(media, media_cn) + "：" + zh[item["idx"]], bold=True),
-                ]))
+                blocks.append(
+                    _text_block(
+                        [
+                            _text_run(
+                                f"{media}: {title}", bold=True, url=str(item["url"])
+                            ),
+                        ]
+                    )
+                )
+                blocks.append(
+                    _text_block(
+                        [
+                            _text_run(
+                                _media_cn(media, media_cn) + "：" + zh[item["idx"]],
+                                bold=True,
+                            ),
+                        ]
+                    )
+                )
                 counts[sec] += 1
     return blocks, counts
 
@@ -374,7 +500,9 @@ def resolve_doc(token: str, wiki_token: str = REPORT_WIKI_TOKEN) -> str:
     if str(node.get("node_token") or "") not in ("", wiki_token):
         raise RuntimeError("wiki 节点 token 不符，未改文档")
     if str(node.get("obj_type") or "") != "docx" or not node.get("obj_token"):
-        raise RuntimeError(f"wiki 节点不是可写的 docx，未改文档：obj_type={node.get('obj_type') or 'empty'}")
+        raise RuntimeError(
+            f"wiki 节点不是可写的 docx，未改文档：obj_type={node.get('obj_type') or 'empty'}"
+        )
     return str(node["obj_token"])
 
 
@@ -385,11 +513,14 @@ def list_children(token: str, doc_id: str) -> list[dict]:
         query = "page_size=500"
         if page_token:
             query += "&page_token=" + quote(page_token, safe="")
-        data = _api(
-            token,
-            "GET",
-            f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/{doc_id}/children?{query}",
-        ).get("data") or {}
+        data = (
+            _api(
+                token,
+                "GET",
+                f"https://open.feishu.cn/open-apis/docx/v1/documents/{doc_id}/blocks/{doc_id}/children?{query}",
+            ).get("data")
+            or {}
+        )
         items.extend(data.get("items") or [])
         if not data.get("has_more"):
             return items
@@ -457,11 +588,15 @@ def _write_copy(blocks: list[dict]) -> dict:
     return result
 
 
-def write_word(final_path: Path, zh_path: Path, kb_path: Path, *, data_date: str, raw_count: int) -> Path:
+def write_word(
+    final_path: Path, zh_path: Path, kb_path: Path, *, data_date: str, raw_count: int
+) -> Path:
     """用第五版 build_doc.py 生成 Word。失败时还没发群消息。"""
     if not BUILD_DOC.is_file():
         raise RuntimeError(f"找不到 build_doc.py，未发群消息：{BUILD_DOC}")
-    out = final_path.resolve().parent / f"百度海外舆情日报_竞品与领导人_{data_date}.docx"
+    out = (
+        final_path.resolve().parent / f"百度海外舆情日报_竞品与领导人_{data_date}.docx"
+    )
     completed = subprocess.run(
         [
             sys.executable,
@@ -486,7 +621,9 @@ def write_word(final_path: Path, zh_path: Path, kb_path: Path, *, data_date: str
     return out
 
 
-def publish(*, final_path: Path, zh_path: Path, kb_path: Path, after: str, raw_count: int, send) -> dict:
+def publish(
+    *, final_path: Path, zh_path: Path, kb_path: Path, after: str, raw_count: int, send
+) -> dict:
     data_date = data_date_from_after(after)
     final, zh, media_cn, leader_cn = prepare(final_path, zh_path, kb_path)
     blocks, counts = build_blocks(
@@ -552,12 +689,22 @@ def format_summary(summary: dict) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="清空并重写固定飞书日报文档，生成 Word，再把日期、链接和 Word 发到固定群")
-    parser.add_argument("--final", required=True, help="prep_final.py 写出的 final.json")
+    parser = argparse.ArgumentParser(
+        description="清空并重写固定飞书日报文档，生成 Word，再把日期、链接和 Word 发到固定群"
+    )
+    parser.add_argument(
+        "--final", required=True, help="prep_final.py 写出的 final.json"
+    )
     parser.add_argument("--zh", required=True, help="按 idx 填好的 zh.json")
-    parser.add_argument("--kb", default=str(DEFAULT_KB), help="翻译知识库.xlsx，默认用技能里的那份")
-    parser.add_argument("--after", required=True, help="导出摘要里的 after，用来算上海数据日期")
-    parser.add_argument("--raw-count", type=int, default=0, help="进入筛选的原始行数，只写在文档副标题")
+    parser.add_argument(
+        "--kb", default=str(DEFAULT_KB), help="翻译知识库.xlsx，默认用技能里的那份"
+    )
+    parser.add_argument(
+        "--after", required=True, help="导出摘要里的 after，用来算上海数据日期"
+    )
+    parser.add_argument(
+        "--raw-count", type=int, default=0, help="进入筛选的原始行数，只写在文档副标题"
+    )
     args = parser.parse_args()
     summary = publish(
         final_path=Path(args.final),

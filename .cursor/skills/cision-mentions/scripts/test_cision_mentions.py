@@ -39,12 +39,20 @@ class CisionMentionsTest(unittest.TestCase):
             cision_lib.shanghai_window(afternoon),
             ("2026-10-22T23:00:00.000Z", "2026-10-25T23:00:00.000Z"),
         )
-        self.assertEqual(cision_lib.shanghai_window(early), cision_lib.shanghai_window(afternoon))
+        self.assertEqual(
+            cision_lib.shanghai_window(early), cision_lib.shanghai_window(afternoon)
+        )
 
     def test_query_percent_encodes_brackets(self) -> None:
-        query = cision_lib.mentions_query("2026-10-24T23:00:00.000Z", "2026-10-25T23:00:00.000Z", 1, 4999)
-        self.assertIn("filter%5Brange%5D%5Bafter%5D=2026-10-24T23%3A00%3A00.000Z", query)
-        self.assertIn("filter%5Brange%5D%5Bbefore%5D=2026-10-25T23%3A00%3A00.000Z", query)
+        query = cision_lib.mentions_query(
+            "2026-10-24T23:00:00.000Z", "2026-10-25T23:00:00.000Z", 1, 4999
+        )
+        self.assertIn(
+            "filter%5Brange%5D%5Bafter%5D=2026-10-24T23%3A00%3A00.000Z", query
+        )
+        self.assertIn(
+            "filter%5Brange%5D%5Bbefore%5D=2026-10-25T23%3A00%3A00.000Z", query
+        )
         self.assertIn("pagination%5Bpage%5D=1", query)
         self.assertIn("pagination%5Bpage_size%5D=4999", query)
         self.assertNotIn("filter[range]", query)
@@ -114,7 +122,9 @@ class CisionMentionsTest(unittest.TestCase):
             self.assertTrue(latest.is_file())
             self.assertEqual(cision_lib.load_previous_ids(latest), {"10", "11"})
 
-            def fetch_again(page_no: int, page_size: int, after: str, before: str) -> str:
+            def fetch_again(
+                page_no: int, page_size: int, after: str, before: str
+            ) -> str:
                 if page_no == 1:
                     return page("id,title", "11,two", "12,three")
                 return "id,title\n"
@@ -184,15 +194,20 @@ class CisionMentionsTest(unittest.TestCase):
 
         import feishu_push
 
-        self.assertEqual(feishu_push.FEISHU_CHAT_ID, "oc_27040b0dc3a733ab164199154c489fad")
+        self.assertEqual(
+            feishu_push.FEISHU_CHAT_ID, "oc_27040b0dc3a733ab164199154c489fad"
+        )
         self.assertEqual(feishu_push.FEISHU_RECEIVE_ID_TYPE, "chat_id")
-        self.assertEqual(list(inspect.signature(feishu_push.push_delta).parameters), ["delta_path", "summary"])
+        self.assertEqual(
+            list(inspect.signature(feishu_push.push_delta).parameters),
+            ["delta_path", "summary"],
+        )
         scripts = Path(__file__).resolve().parent
         export_source = (scripts / "export_mentions.py").read_text(encoding="utf-8")
         push_source = (scripts / "feishu_push.py").read_text(encoding="utf-8")
         self.assertNotIn("feishu-receive", export_source)
         self.assertNotIn("FEISHU_CHAT_ID", export_source)
-        self.assertNotIn("os.environ.get(\"FEISHU_CHAT", push_source)
+        self.assertNotIn('os.environ.get("FEISHU_CHAT', push_source)
         self.assertEqual(push_source.count("oc_27040b0dc3a733ab164199154c489fad"), 1)
         self.assertEqual(feishu_push.BITABLE_SYNC_STREAM_ID, "1023128")
         self.assertEqual(feishu_push.WIKI_NODE_TOKEN, "ODp7wESdDiXrHjk7tEPcsQrSn6d")
@@ -219,7 +234,9 @@ class CisionMentionsTest(unittest.TestCase):
         calls: list[tuple[str, dict | None]] = []
         original = feishu_push._request
 
-        def fake_request(url: str, method: str, payload: dict | None = None, token: str | None = None) -> dict:
+        def fake_request(
+            url: str, method: str, payload: dict | None = None, token: str | None = None
+        ) -> dict:
             calls.append((method, payload))
             self.assertIn("/tables/" + feishu_push.BITABLE_TABLE_ID, url)
             return {"code": 0, "data": {}}
@@ -250,7 +267,13 @@ class CisionMentionsTest(unittest.TestCase):
             def list_records(self) -> list[dict]:
                 calls.append("records")
                 return [
-                    {"record_id": "rec_old", "fields": {"id": [{"text": "10", "type": "text"}], "文本": "placeholder"}},
+                    {
+                        "record_id": "rec_old",
+                        "fields": {
+                            "id": [{"text": "10", "type": "text"}],
+                            "文本": "placeholder",
+                        },
+                    },
                     {"record_id": "rec_blank", "fields": {"文本": "empty"}},
                 ]
 
@@ -271,7 +294,9 @@ class CisionMentionsTest(unittest.TestCase):
         def push(delta_path: Path, summary: dict) -> None:
             pushed.append(summary["delta_rows"])
             calls.append("push")
-            self.assertEqual(delta_path.read_text(encoding="utf-8"), "id,title\n12,new\n")
+            self.assertEqual(
+                delta_path.read_text(encoding="utf-8"), "id,title\n12,new\n"
+            )
 
         with tempfile.TemporaryDirectory(prefix="cision-mentions-") as temporary:
             delta_path = Path(temporary) / "delta.csv"
@@ -285,7 +310,14 @@ class CisionMentionsTest(unittest.TestCase):
             )
         self.assertEqual(
             calls,
-            ["fields", "records", "name", ("delete", ["rec_old", "rec_blank"]), ("write", [{"id": "10", "title": "old"}, {"id": "12", "title": "new"}]), "push"],
+            [
+                "fields",
+                "records",
+                "name",
+                ("delete", ["rec_old", "rec_blank"]),
+                ("write", [{"id": "10", "title": "old"}, {"id": "12", "title": "new"}]),
+                "push",
+            ],
         )
         self.assertEqual(pushed, [1])
         self.assertEqual(summary["bitable_written"], 2)
@@ -319,7 +351,14 @@ class CisionMentionsTest(unittest.TestCase):
             raise AssertionError("不应推送")
 
         with self.assertRaises(RuntimeError):
-            feishu_push.sync_1023128_baseline(["id"], [["1"]], Path("/tmp/ignored-delta.csv"), {}, client=Fake(), push=push)
+            feishu_push.sync_1023128_baseline(
+                ["id"],
+                [["1"]],
+                Path("/tmp/ignored-delta.csv"),
+                {},
+                client=Fake(),
+                push=push,
+            )
 
     def test_missing_id_field_means_full_delta(self) -> None:
         import feishu_push
@@ -372,7 +411,9 @@ class CisionMentionsTest(unittest.TestCase):
                 return page("id,title", "10,one")
             return "id,title\n"
 
-        def sync(header: list[str], rows: list[list[str]], delta_path: Path, summary: dict) -> dict:
+        def sync(
+            header: list[str], rows: list[list[str]], delta_path: Path, summary: dict
+        ) -> dict:
             cision_lib.write_csv(delta_path, header, rows)
             updated = dict(summary)
             updated["delta_rows"] = len(rows)
@@ -424,7 +465,10 @@ class CisionMentionsTest(unittest.TestCase):
                 now=now,
                 sync=sync,
             )
-            self.assertEqual(cision_lib.load_previous_ids(root / "state" / "8" / "latest.csv"), {"10"})
+            self.assertEqual(
+                cision_lib.load_previous_ids(root / "state" / "8" / "latest.csv"),
+                {"10"},
+            )
             self.assertEqual(summary["delta_rows"], 1)
             self.assertEqual(summary["feishu"], "skipped")
 

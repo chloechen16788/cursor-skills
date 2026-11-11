@@ -24,7 +24,9 @@ MAX_PAGE_PRODUCT = 5000
 MAX_PAGES = 200
 
 
-def _quote(value: str, safe: str, encoding: str | None = None, errors: str | None = None) -> str:
+def _quote(
+    value: str, safe: str, encoding: str | None = None, errors: str | None = None
+) -> str:
     del safe, encoding, errors
     return quote(str(value), safe="")
 
@@ -145,15 +147,23 @@ def parse_streams(payload: bytes) -> list[tuple[str, str]]:
 
 
 def fetch_streams() -> list[tuple[str, str]]:
-    body = api_get("/public/api/v2/streams", encode_query({"format": "json"}), "application/json")
+    body = api_get(
+        "/public/api/v2/streams", encode_query({"format": "json"}), "application/json"
+    )
     return parse_streams(body)
 
 
-def parse_csv_page(text: str, known_header: list[str] | None = None) -> tuple[list[str] | None, list[list[str]]]:
+def parse_csv_page(
+    text: str, known_header: list[str] | None = None
+) -> tuple[list[str] | None, list[list[str]]]:
     cleaned = text.lstrip("\ufeff")
     if not cleaned.strip():
         return known_header, []
-    parsed = [row for row in csv.reader(io.StringIO(cleaned)) if any(cell.strip() for cell in row)]
+    parsed = [
+        row
+        for row in csv.reader(io.StringIO(cleaned))
+        if any(cell.strip() for cell in row)
+    ]
     if not parsed:
         return known_header, []
     if known_header is None:
@@ -167,7 +177,9 @@ def parse_csv_page(text: str, known_header: list[str] | None = None) -> tuple[li
     return known_header, parsed
 
 
-def collect_pages(fetch_page, page_size: int, after: str, before: str) -> tuple[list[str], list[list[str]], int]:
+def collect_pages(
+    fetch_page, page_size: int, after: str, before: str
+) -> tuple[list[str], list[list[str]], int]:
     header: list[str] | None = None
     rows: list[list[str]] = []
     seen: set[tuple[str, ...]] = set()
@@ -176,7 +188,9 @@ def collect_pages(fetch_page, page_size: int, after: str, before: str) -> tuple[
     for page in range(1, MAX_PAGES + 1):
         if page * page_size >= MAX_PAGE_PRODUCT:
             # 4999 的满页已经覆盖接口允许的最大窗口。更小的 page_size 若本页已满，再请求会 400，不能静默截断。
-            reached_end = pages_with_data and (last_count < page_size or page_size == MAX_PAGE_SIZE)
+            reached_end = pages_with_data and (
+                last_count < page_size or page_size == MAX_PAGE_SIZE
+            )
             if reached_end:
                 print(
                     f"page={page} not_requested=page*page_size>={MAX_PAGE_PRODUCT}",
@@ -186,7 +200,9 @@ def collect_pages(fetch_page, page_size: int, after: str, before: str) -> tuple[
             raise RuntimeError(
                 "下一页会使 page 与 page_size 的乘积达到 5000，接口返回 HTTP 400 且响应体为空"
             )
-        page_header, data = parse_csv_page(fetch_page(page, page_size, after, before), header)
+        page_header, data = parse_csv_page(
+            fetch_page(page, page_size, after, before), header
+        )
         if header is None:
             header = page_header or ["id"]
         print(f"page={page} data_rows={len(data)}", file=sys.stderr)
@@ -209,10 +225,16 @@ def _row_id(header: list[str], row: list[str]) -> str:
     return row[index].strip()
 
 
-def select_delta(header: list[str], rows: list[list[str]], previous: set[str] | None) -> list[list[str]]:
+def select_delta(
+    header: list[str], rows: list[list[str]], previous: set[str] | None
+) -> list[list[str]]:
     if previous is None:
         return list(rows)
-    return [row for row in rows if not _row_id(header, row) or _row_id(header, row) not in previous]
+    return [
+        row
+        for row in rows
+        if not _row_id(header, row) or _row_id(header, row) not in previous
+    ]
 
 
 def write_csv(path: Path, header: list[str], rows: list[list[str]]) -> None:
@@ -235,7 +257,11 @@ def load_previous_ids(path: Path) -> set[str] | None:
         if "id" not in header:
             raise RuntimeError(f"{path} 缺少 id 列")
         index = header.index("id")
-        return {row[index].strip() for row in reader if index < len(row) and row[index].strip()}
+        return {
+            row[index].strip()
+            for row in reader
+            if index < len(row) and row[index].strip()
+        }
 
 
 def replace_file(src: Path, dest: Path) -> None:
@@ -304,7 +330,9 @@ def export_mentions(
     root = ensure_output_dir(Path(output_dir))
     after, before = shanghai_window(now)
     header, rows, pages = collect_pages(fetch_page, page_size, after, before)
-    run_dir = root / "runs" / stream_id / f"{compact_stamp(after)}_{compact_stamp(before)}"
+    run_dir = (
+        root / "runs" / stream_id / f"{compact_stamp(after)}_{compact_stamp(before)}"
+    )
     full_path = run_dir / "full.csv"
     delta_path = run_dir / "delta.csv"
     latest_path = root / "state" / stream_id / "latest.csv"
@@ -334,7 +362,9 @@ def export_mentions(
     return summary
 
 
-def fetch_mentions_page(stream_id: str, page: int, page_size: int, after: str, before: str) -> str:
+def fetch_mentions_page(
+    stream_id: str, page: int, page_size: int, after: str, before: str
+) -> str:
     body = api_get(
         f"/public/api/v2/mentions/{normalize_stream_id(stream_id)}",
         mentions_query(after, before, page, page_size),
