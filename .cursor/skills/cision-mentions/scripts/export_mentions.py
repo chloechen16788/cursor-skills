@@ -53,7 +53,12 @@ def _export_1023128(*, output_dir: Path, fetch_page, page_size: int, now, sync) 
     root = cision_lib.ensure_output_dir(Path(output_dir))
     after, before = cision_lib.shanghai_window(now)
     header, rows, pages = cision_lib.collect_pages(fetch_page, page_size, after, before)
-    run_dir = root / "runs" / feishu_push.BITABLE_SYNC_STREAM_ID / f"{cision_lib.compact_stamp(after)}_{cision_lib.compact_stamp(before)}"
+    run_dir = (
+        root
+        / "runs"
+        / feishu_push.BITABLE_SYNC_STREAM_ID
+        / f"{cision_lib.compact_stamp(after)}_{cision_lib.compact_stamp(before)}"
+    )
     full_path = run_dir / "full.csv"
     delta_path = run_dir / "delta.csv"
     cision_lib.write_csv(full_path, header, rows)
@@ -97,7 +102,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir) if args.output_dir else cision_lib.default_output_dir()
+    output_dir = (
+        Path(args.output_dir) if args.output_dir else cision_lib.default_output_dir()
+    )
     stream_id = cision_lib.normalize_stream_id(args.stream_id)
 
     def fetch_page(page: int, page_size: int, after: str, before: str) -> str:

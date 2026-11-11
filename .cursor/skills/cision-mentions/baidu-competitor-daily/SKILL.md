@@ -7,7 +7,8 @@ description:
   wants it filtered, curated into four section fields (国内企业 / 自动驾驶 / 海外企业 /
   企业领导人, leaders nested under their brand), translated against a《翻译知识库》
   one-to-one glossary, and assembled into a two-line report. The scheduled Cision run
-  writes the fixed Feishu doc and also builds a Word file with build_doc.py, then sends
+  writes the fixed Feishu doc, writes the same body to the second wiki with a separate
+  Feishu app, and also builds a Word file with build_doc.py, then sends
   the Shanghai date, the wiki link, and that Word file to the same group. Trigger phrases
   include "百度竞品日报", "百度海外舆情", "竞品同业日报", "媒体监测周/日报", or any request to
   turn a media export into a Baidu competitor/leader briefing.
@@ -21,9 +22,12 @@ Each entry is two lines (English title with hyperlink, then the Chinese title). 
 and leader names come from the《翻译知识库》.
 
 When this folder is used by the Cision mentions skill, the last command is
-`../scripts/publish_daily_report.py`. It clears and rewrites the fixed Feishu doc, generates
+`../scripts/publish_daily_report.py`. It clears and rewrites the fixed Feishu doc, writes the
+same body to `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e` with
+`FEISHU_COPY_APP_ID` and `FEISHU_COPY_APP_SECRET`, generates
 the Word file with `scripts/build_doc.py`, then sends the Shanghai data date, the wiki link,
-and the Word file to the fixed group. Do not send the file anywhere else. The scheduled export
+and the Word file to the fixed group. Do not send the file anywhere else. The copy app is not
+used for the group, the bitable, or the Word file. The scheduled export
 already has a `content` column, so do not insert `csv_to_delta.py` into that run.
 
 ## When to use

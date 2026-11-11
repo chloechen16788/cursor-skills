@@ -51,7 +51,9 @@ class BodyExtractTest(unittest.TestCase):
         self.assertEqual(record["错误"], "")
 
     def test_markdown_is_not_rewritten_or_truncated(self) -> None:
-        markdown = "The score was 3-2 [in overtime].\n\n[Related](https://news.example/x)"
+        markdown = (
+            "The score was 3-2 [in overtime].\n\n[Related](https://news.example/x)"
+        )
         record = body_extract.build_record(
             {"id": "1", "url": "https://news.example/a", "csv_title": "Final"},
             {"markdown": markdown, "error": ""},
@@ -267,7 +269,9 @@ class BodyExtractTest(unittest.TestCase):
             45,
         )
         self.assertEqual(
-            inspect.signature(body_extract.run_delta_file).parameters["workers"].default,
+            inspect.signature(body_extract.run_delta_file)
+            .parameters["workers"]
+            .default,
             45,
         )
         extract = (SCRIPTS / "extract_bodies.py").read_text(encoding="utf-8")
@@ -347,20 +351,33 @@ class BodyExtractTest(unittest.TestCase):
         self.assertNotIn("bitable", source)
         self.assertIn("def send_body_update", push_source)
         self.assertIn("content", skill)
-        self.assertNotIn("BODY_COLUMN = \"正文\"", source)
+        self.assertNotIn('BODY_COLUMN = "正文"', source)
         self.assertIn("oc_27040b0dc3a733ab164199154c489fad", push_source)
         self.assertIn("publish_daily_report.py", skill)
         self.assertIn("baidu-competitor-daily", skill)
         self.assertIn("PP88weeBdi1Pcgkmpxbc48lSn5e", skill)
-        self.assertIn("https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e", skill)
+        self.assertIn(
+            "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e", skill
+        )
+        self.assertIn(
+            "https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e", skill
+        )
+        self.assertIn("FEISHU_COPY_APP_ID", skill)
+        self.assertIn("FEISHU_COPY_APP_SECRET", skill)
         self.assertIn("等于 0 就停在这条导出摘要", skill)
         self.assertIn("1023128", skill)
-        publish_source = (SCRIPTS / "publish_daily_report.py").read_text(encoding="utf-8")
+        publish_source = (SCRIPTS / "publish_daily_report.py").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("send_text", publish_source)
+        self.assertIn("DoXTwxbK1iX60yk282AcEN5Mn0e", publish_source)
+        self.assertIn("copy_tenant_token", publish_source)
+        self.assertIn("FEISHU_COPY_APP_ID", push_source)
+        self.assertIn("FEISHU_COPY_APP_SECRET", push_source)
         self.assertNotIn("oc_27040b0dc3a733ab164199154c489fad", publish_source)
         self.assertNotIn("receive_id", publish_source)
         self.assertNotIn("--chat", publish_source)
-        self.assertNotIn("os.environ.get(\"FEISHU_CHAT", publish_source)
+        self.assertNotIn('os.environ.get("FEISHU_CHAT', publish_source)
 
     def test_report_notice_has_date_and_wiki_link(self) -> None:
         import publish_daily_report
@@ -370,7 +387,10 @@ class BodyExtractTest(unittest.TestCase):
             {"国内企业": 8, "自动驾驶": 53, "海外企业": 7, "企业领导人": 0},
         )
         self.assertIn("data_date=2026-11-01", text)
-        self.assertIn("https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e", text)
+        self.assertIn(
+            "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e", text
+        )
+        self.assertNotIn("jcn5bws14c2g", text)
         self.assertNotIn("http://", text)
         self.assertEqual(
             publish_daily_report.data_date_from_after("2026-10-31T23:00:00.000Z"),

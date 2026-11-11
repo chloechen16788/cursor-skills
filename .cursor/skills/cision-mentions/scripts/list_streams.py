@@ -10,7 +10,9 @@ import cision_lib
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="列出 Cision Mention Stream 的 id 和 label")
+    parser = argparse.ArgumentParser(
+        description="列出 Cision Mention Stream 的 id 和 label"
+    )
     parser.parse_args()
     for stream_id, label in cision_lib.fetch_streams():
         print(f"{stream_id}\t{label}")

@@ -50,7 +50,10 @@ def call_doubao_search(api_key: str, query: str) -> dict:
     req = Request(
         API_URL,
         method="POST",
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
     )
     try:
@@ -74,7 +77,9 @@ def parse_query_date_range(query: str, year: int) -> tuple[date, date] | None:
     if not match:
         return None
     try:
-        start = date(year, int(match.group("start_month")), int(match.group("start_day")))
+        start = date(
+            year, int(match.group("start_month")), int(match.group("start_day"))
+        )
         end = date(year, int(match.group("end_month")), int(match.group("end_day")))
     except ValueError:
         return None
@@ -103,13 +108,17 @@ def parse_publish_date(raw_publish_time: str, fallback_year: int) -> date | None
     md_match = re.search(r"(?P<month>\d{1,2})[./月](?P<day>\d{1,2})", text)
     if md_match:
         try:
-            return date(fallback_year, int(md_match.group("month")), int(md_match.group("day")))
+            return date(
+                fallback_year, int(md_match.group("month")), int(md_match.group("day"))
+            )
         except ValueError:
             return None
     return None
 
 
-def in_date_range(publish_time: str, query_range: tuple[date, date] | None, fallback_year: int) -> bool:
+def in_date_range(
+    publish_time: str, query_range: tuple[date, date] | None, fallback_year: int
+) -> bool:
     if query_range is None:
         return True
     publish_date = parse_publish_date(publish_time, fallback_year)
@@ -119,7 +128,9 @@ def in_date_range(publish_time: str, query_range: tuple[date, date] | None, fall
     return start <= publish_date <= end
 
 
-def build_rows(items: list[dict], query_range: tuple[date, date] | None, fallback_year: int) -> list[dict]:
+def build_rows(
+    items: list[dict], query_range: tuple[date, date] | None, fallback_year: int
+) -> list[dict]:
     rows = []
     for item in items:
         title = (item.get("Title") or "").strip()
@@ -153,8 +164,12 @@ def export_excel(rows: list[dict], out_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Doubao Search export tool")
-    parser.add_argument("--query", action="append", required=True, help="Search query (repeatable)")
-    parser.add_argument("--max-workers", type=int, default=3, help="Parallel worker count")
+    parser.add_argument(
+        "--query", action="append", required=True, help="Search query (repeatable)"
+    )
+    parser.add_argument(
+        "--max-workers", type=int, default=3, help="Parallel worker count"
+    )
     parser.add_argument("--env-file", default=".env", help="Path to .env file")
     parser.add_argument("--out-dir", default="Doc", help="Output directory")
     args = parser.parse_args()
@@ -184,10 +199,14 @@ def main() -> None:
                 for row in rows:
                     row["__query"] = query
                 all_rows.extend(rows)
-                raw_bundle["results"].append({"query": query, "ok": True, "data": data, "row_count": len(rows)})
+                raw_bundle["results"].append(
+                    {"query": query, "ok": True, "data": data, "row_count": len(rows)}
+                )
                 print(f"[OK] {query} -> {len(rows)} rows")
             except Exception as error:  # noqa: BLE001
-                raw_bundle["results"].append({"query": query, "ok": False, "error": str(error)})
+                raw_bundle["results"].append(
+                    {"query": query, "ok": False, "error": str(error)}
+                )
                 print(f"[ERR] {query} -> {error}")
 
     seen_titles: set[str] = set()
@@ -201,7 +220,9 @@ def main() -> None:
         dedup_rows.append(row)
 
     export_excel(dedup_rows, xlsx_path)
-    raw_path.write_text(json.dumps(raw_bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+    raw_path.write_text(
+        json.dumps(raw_bundle, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     print(f"excel={xlsx_path}")
     print(f"raw={raw_path}")

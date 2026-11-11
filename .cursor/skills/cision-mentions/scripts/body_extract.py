@@ -165,7 +165,11 @@ def _column_name(index: int) -> str:
 
 def _inline_cell(ref: str, value: str) -> str:
     text = escape(value)
-    space = ' xml:space="preserve"' if value[:1].isspace() or value[-1:].isspace() or "\n" in value else ""
+    space = (
+        ' xml:space="preserve"'
+        if value[:1].isspace() or value[-1:].isspace() or "\n" in value
+        else ""
+    )
     return f'<c r="{ref}" t="inlineStr"><is><t{space}>{text}</t></is></c>'
 
 
@@ -368,7 +372,9 @@ def run_bodies(
         fetched = scrape(urls) if urls else {}
     except Exception as error:  # noqa: BLE001
         detail = feishu_push.redact_secrets(str(error))
-        raise RuntimeError(f"抓取没有完成，未发送文件，也没有改当日表：{detail}") from None
+        raise RuntimeError(
+            f"抓取没有完成，未发送文件，也没有改当日表：{detail}"
+        ) from None
     if not isinstance(fetched, dict):
         raise RuntimeError("抓取结果不是按 url 索引的对象，未发送文件")
 
