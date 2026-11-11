@@ -81,7 +81,7 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
   --after "<导出摘要里的 after>" \
   --raw-count <delta_rows>
 ```
-脚本先清空固定 wiki 文档的正文，再写入两行式日报，然后调用 `scripts/build_doc.py` 生成 Word，最后把数据日期、wiki 链接和这个 Word 发到固定群。不要把 Word 发到别的会话。`--after` 与 `--raw-count` 仍必传。展示顺序用第五版的 `discover_events` 和 focus 稳定分块。
+脚本先清空固定 wiki 文档的正文，再写入两行式日报，然后调用 `scripts/build_doc.py` 生成 Word，最后把数据日期、wiki 链接和这个 Word 发到固定群。主文档和群消息完成后，再用 `FEISHU_COPY_APP_ID` / `FEISHU_COPY_APP_SECRET` 把同一份正文写入 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`。不要把 Word 发到别的会话。`--after` 与 `--raw-count` 仍必传。展示顺序用第五版的 `discover_events` 和 focus 稳定分块。
 
 ## 3. 收尾自检清单
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""用飞书企业自建应用凭证推送增量结果。只读取 FEISHU_APP_ID 与 FEISHU_APP_SECRET。"""
+"""用飞书企业自建应用凭证推送增量结果。群、比较表和 Word 只读取 FEISHU_APP_ID 与 FEISHU_APP_SECRET。第二份日报文档只读取 FEISHU_COPY_APP_ID 与 FEISHU_COPY_APP_SECRET。"""
 
 from __future__ import annotations
 
@@ -33,6 +33,8 @@ BITABLE_BATCH = 500
 _SECRET_ENV_KEYS = (
     "FEISHU_APP_SECRET",
     "FEISHU_APP_ID",
+    "FEISHU_COPY_APP_SECRET",
+    "FEISHU_COPY_APP_ID",
     "CISION_API_TOKEN",
     "FIRECRAWL_API_KEY",
     "ARTICLE_MODEL_API_KEY",
@@ -102,11 +104,7 @@ def missing_credentials_message() -> str:
     )
 
 
-def _tenant_access_token() -> str:
-    app_id = os.environ.get("FEISHU_APP_ID", "").strip()
-    app_secret = os.environ.get("FEISHU_APP_SECRET", "").strip()
-    if not app_id or not app_secret:
-        raise RuntimeError(missing_credentials_message())
+def _request_tenant_token(app_id: str, app_secret: str) -> str:
     body = json.dumps({"app_id": app_id, "app_secret": app_secret}).encode("utf-8")
     payload = _post(
         TOKEN_URL, body, {"Content-Type": "application/json; charset=utf-8"}
@@ -117,6 +115,14 @@ def _tenant_access_token() -> str:
             f"飞书未返回 tenant_access_token：code={payload.get('code')} msg={_redact(str(payload.get('msg')))}"
         )
     return token
+
+
+def _tenant_access_token() -> str:
+    app_id = os.environ.get("FEISHU_APP_ID", "").strip()
+    app_secret = os.environ.get("FEISHU_APP_SECRET", "").strip()
+    if not app_id or not app_secret:
+        raise RuntimeError(missing_credentials_message())
+    return _request_tenant_token(app_id, app_secret)
 
 
 def _send_message(token: str, msg_type: str, content: dict) -> None:
@@ -220,6 +226,29 @@ def api_request(
 
 def tenant_token() -> str:
     return _tenant_access_token()
+
+
+def copy_credentials_present() -> bool:
+    return bool(
+        os.environ.get("FEISHU_COPY_APP_ID", "").strip()
+        and os.environ.get("FEISHU_COPY_APP_SECRET", "").strip()
+    )
+
+
+def missing_copy_credentials_message() -> str:
+    return (
+        "当前进程读不到 FEISHU_COPY_APP_ID 或 FEISHU_COPY_APP_SECRET。"
+        "这两个 Runtime Secret 只用于第二份日报文档，不用于群消息、比较表或 Word。"
+        "不要把凭证写进命令、日志、提交或对话。"
+    )
+
+
+def copy_tenant_token() -> str:
+    app_id = os.environ.get("FEISHU_COPY_APP_ID", "").strip()
+    app_secret = os.environ.get("FEISHU_COPY_APP_SECRET", "").strip()
+    if not app_id or not app_secret:
+        raise RuntimeError(missing_copy_credentials_message())
+    return _request_tenant_token(app_id, app_secret)
 
 
 def send_text(text: str) -> None:

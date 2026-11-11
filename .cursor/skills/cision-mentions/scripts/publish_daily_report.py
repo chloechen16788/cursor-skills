@@ -23,6 +23,8 @@ import feishu_push
 
 REPORT_WIKI_TOKEN = "PP88weeBdi1Pcgkmpxbc48lSn5e"
 REPORT_WIKI_URL = "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e"
+COPY_WIKI_TOKEN = "DoXTwxbK1iX60yk282AcEN5Mn0e"
+COPY_WIKI_URL = "https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e"
 SKILL_ROOT = Path(__file__).resolve().parent.parent / "baidu-competitor-daily"
 DEFAULT_KB = SKILL_ROOT / "assets" / "翻译知识库.xlsx"
 BUILD_DOC = SKILL_ROOT / "scripts" / "build_doc.py"
@@ -362,14 +364,14 @@ def _api(token: str, method: str, url: str, payload: dict | None = None) -> dict
     return feishu_push.api_request(url, method, payload, token=token)
 
 
-def resolve_doc(token: str) -> str:
+def resolve_doc(token: str, wiki_token: str = REPORT_WIKI_TOKEN) -> str:
     body = _api(
         token,
         "GET",
-        f"https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node?token={REPORT_WIKI_TOKEN}",
+        f"https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node?token={wiki_token}",
     )
     node = (body.get("data") or {}).get("node") or {}
-    if str(node.get("node_token") or "") not in ("", REPORT_WIKI_TOKEN):
+    if str(node.get("node_token") or "") not in ("", wiki_token):
         raise RuntimeError("wiki 节点 token 不符，未改文档")
     if str(node.get("obj_type") or "") != "docx" or not node.get("obj_token"):
         raise RuntimeError(f"wiki 节点不是可写的 docx，未改文档：obj_type={node.get('obj_type') or 'empty'}")
@@ -426,6 +428,33 @@ def write_blocks(token: str, doc_id: str, blocks: list[dict]) -> int:
         )
         written += len(chunk)
     return written
+
+
+def _write_copy(blocks: list[dict]) -> dict:
+    """用另一套飞书应用把同一份正文写入第二份 wiki。失败不撤销主文档和群消息。"""
+    result = {
+        "copy_wiki_url": COPY_WIKI_URL,
+        "copy_written_blocks": 0,
+        "copy_feishu": "failed",
+    }
+    try:
+        if not feishu_push.copy_credentials_present():
+            raise RuntimeError(feishu_push.missing_copy_credentials_message())
+        token = feishu_push.copy_tenant_token()
+        doc_id = resolve_doc(token, COPY_WIKI_TOKEN)
+        clear_body(token, doc_id)
+        if list_children(token, doc_id):
+            raise RuntimeError("副本清空后仍有子块")
+        written = write_blocks(token, doc_id, blocks)
+        if len(list_children(token, doc_id)) != written:
+            raise RuntimeError("副本写入后的子块数与预期不符")
+        result["copy_written_blocks"] = written
+        result["copy_feishu"] = "sent"
+    except Exception as error:  # noqa: BLE001
+        detail = feishu_push.redact_secrets(str(error)).replace("\n", " ")
+        result["copy_error"] = detail
+        print(f"主文档、群消息和 Word 已完成，副本写入失败：{detail}", file=sys.stderr)
+    return result
 
 
 def write_word(final_path: Path, zh_path: Path, kb_path: Path, *, data_date: str, raw_count: int) -> Path:
@@ -487,7 +516,7 @@ def publish(*, final_path: Path, zh_path: Path, kb_path: Path, after: str, raw_c
     except Exception as error:  # noqa: BLE001
         detail = feishu_push.redact_secrets(str(error))
         raise RuntimeError(f"文档已重写，说明已发送，Word 发送失败：{detail}") from None
-    return {
+    summary = {
         "data_date": data_date,
         "cleared_children": cleared,
         "written_blocks": written,
@@ -496,6 +525,8 @@ def publish(*, final_path: Path, zh_path: Path, kb_path: Path, after: str, raw_c
         "docx": str(docx_path),
         "feishu": "sent",
     }
+    summary.update(_write_copy(blocks))
+    return summary
 
 
 def format_summary(summary: dict) -> str:
@@ -512,7 +543,11 @@ def format_summary(summary: dict) -> str:
             f"wiki_url={summary['wiki_url']}",
             f"docx={summary['docx']}",
             f"feishu={summary['feishu']}",
+            f"copy_wiki_url={summary.get('copy_wiki_url', COPY_WIKI_URL)}",
+            f"copy_written_blocks={summary.get('copy_written_blocks', 0)}",
+            f"copy_feishu={summary.get('copy_feishu', 'failed')}",
         ]
+        + ([f"copy_error={summary['copy_error']}"] if summary.get("copy_error") else [])
     )
 
 
