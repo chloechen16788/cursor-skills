@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""用飞书企业自建应用凭证推送增量结果。群、比较表和 Word 只读取 FEISHU_APP_ID 与 FEISHU_APP_SECRET。第二份日报文档只读取 FEISHU_COPY_APP_ID 与 FEISHU_COPY_APP_SECRET。"""
+"""用飞书企业自建应用凭证推送增量结果。群、比较表和 Word 只读取 FEISHU_APP_ID 与 FEISHU_APP_SECRET。日报文档只读取 FEISHU_COPY_APP_ID 与 FEISHU_COPY_APP_SECRET。"""
 
 from __future__ import annotations
 
@@ -238,7 +238,7 @@ def copy_credentials_present() -> bool:
 def missing_copy_credentials_message() -> str:
     return (
         "当前进程读不到 FEISHU_COPY_APP_ID 或 FEISHU_COPY_APP_SECRET。"
-        "这两个 Runtime Secret 只用于第二份日报文档，不用于群消息、比较表或 Word。"
+        "这两个 Runtime Secret 只用于日报文档，不用于群消息、比较表或 Word。"
         "不要把凭证写进命令、日志、提交或对话。"
     )
 

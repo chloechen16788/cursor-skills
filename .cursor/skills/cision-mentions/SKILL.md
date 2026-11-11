@@ -1,6 +1,6 @@
 ---
 name: cision-mentions
-description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间窗口拉取 CSV、与上次全量去重，并推送增量。周二到周日的窗口是昨天 07:00 至今天 07:00；周一是上周五 07:00 至周一 07:00。提示词 run the cision mentions skill，以及上海时间周一到周五 07:00 的定时运行，都在同一次运行里先导出 stream 1023128、去重并重写比较表；delta_rows 大于 0 时再抓取正文，保留原列并追加 content，写成 delta-bodies.xlsx 发到同一群，然后按 baidu-competitor-daily 筛选、策展、翻译成四栏目日报，清空并重写飞书文档，再用另一套飞书应用把同一份正文写入第二份文档，再把上海数据日期、文档链接和 Word 文件发到同一群。delta_rows 等于 0 就停，不抓取，也不改文档。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
+description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间窗口拉取 CSV、与上次全量去重，并推送增量。周二到周日的窗口是昨天 07:00 至今天 07:00；周一是上周五 07:00 至周一 07:00。提示词 run the cision mentions skill，以及上海时间周一到周五 07:00 的定时运行，都在同一次运行里先导出 stream 1023128、去重并重写比较表；delta_rows 大于 0 时再抓取正文，保留原列并追加 content，写成 delta-bodies.xlsx 发到同一群，然后按 baidu-competitor-daily 筛选、策展、翻译成四栏目日报，只用另一套飞书应用清空并重写副本飞书文档，不写 prnewswire 主文档，再把上海数据日期、副本链接和 Word 文件发到同一群。delta_rows 等于 0 就停，不抓取，也不改文档。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
 ---
 
 # Cision mentions 导出
@@ -10,7 +10,7 @@ description: 导出 Cision / Streem mentions。列出监测流的 id 与 label�
 - 列出账号下的 Mention Stream，只打印 `id` 和 `label`。
 - 已有 stream id 时，导出该流在固定时间窗内的 mentions CSV，并与上一份全量去重。
 - 两条命令分开调用。导出 mentions 时不要先调用列表接口。
-- 提示词是 `run the cision mentions skill` 时，以及上海时间周一到周五 07:00 的定时自动化，都在同一次运行里做完整条流水线。先导出 stream `1023128`。`delta_rows` 大于 0 再抓取正文、生成四栏目日报、清空并重写飞书文档，再用另一套飞书应用把同一份正文写入第二份文档，然后把数据日期、文档链接和 Word 文件发到同一群。等于 0 就停在导出摘要，不抓取，不改文档，也不再发一条消息。不要在周六或周日跑这条流水线。
+- 提示词是 `run the cision mentions skill` 时，以及上海时间周一到周五 07:00 的定时自动化，都在同一次运行里做完整条流水线。先导出 stream `1023128`。`delta_rows` 大于 0 再抓取正文、生成四栏目日报、只用另一套飞书应用清空并重写副本飞书文档，不写 prnewswire 主文档，然后把数据日期、副本链接和 Word 文件发到同一群。等于 0 就停在导出摘要，不抓取，不改文档，也不再发一条消息。不要在周六或周日跑这条流水线。
 
 基址是 `https://api.cision.one`。认证用请求头 `X-Auth-Token`，值只从环境变量 `CISION_API_TOKEN` 读取。不要把 token 放到命令行参数里，不要打印它，也不要写进日志。
 
@@ -218,7 +218,7 @@ python3 .cursor/skills/cision-mentions/baidu-competitor-daily/scripts/make_zh_te
 2. `curation.py`：先按标题做唯一归属。不设每品牌限额，`CAP` 全是 `None`。不要在脚本跑完后再把一个品牌裁到 5 条或 8 条。
 3. `prep_final.py`：再按标题定归属，并按 URL 去重。同一规范化标题归在一起，组内按 focus、pscore、impact 排。`idx` 是译文键。展示顺序由 `build_doc.py` 的 `discover_events` 决定：同事件相邻，Apple Intelligence 入华在该品牌最前。不要手写事件标签，也不要把 `pscore` 放进这一层的排序键。
 4. 只根据标题填写 `zh.json`，不要读正文，也不要打印正文。媒体、品牌、领导人译名与知识库一一对应。`len(zh) == len(final)`。
-5. 运行发布脚本。它会解析 wiki 节点 `PP88weeBdi1Pcgkmpxbc48lSn5e` 的真实 docx token，先清空文档正文，再按样例版式写入。三个一级标题是「一、国内竞品（含领导人）」「二、自动驾驶竞品（含领导人）」「三、海外竞品（含领导人）」；没有条目的栏目不印标题。品牌是二级标题。英文行整行加粗，半角冒号，整行链到原文。中文行整行加粗，全角冒号，不带链接。同事件的报道排在一起，Apple Intelligence 入华排在该品牌前面。同一条命令再用 `build_doc.py` 生成 Word，英文行是媒体、冒号、标题三段加粗链接。不要删除这个 wiki 节点，也不要改成别的文档，也不要再手改版式。筛选和排序的完整规则在 `baidu-competitor-daily/SKILL.md`，不要用旧的品牌限额覆盖它。
+5. 运行发布脚本。它只用 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET` 解析 wiki 节点 `DoXTwxbK1iX60yk282AcEN5Mn0e` 的真实 docx token，先清空文档正文，再按样例版式写入。不要写 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`。三个一级标题是「一、国内竞品（含领导人）」「二、自动驾驶竞品（含领导人）」「三、海外竞品（含领导人）」；没有条目的栏目不印标题。品牌是二级标题。英文行整行加粗，半角冒号，整行链到原文。中文行整行加粗，全角冒号，不带链接。同事件的报道排在一起，Apple Intelligence 入华排在该品牌前面。同一条命令再用 `build_doc.py` 生成 Word，英文行是媒体、冒号、标题三段加粗链接。不要删除这个 wiki 节点，也不要改成别的文档，也不要再手改版式。筛选和排序的完整规则在 `baidu-competitor-daily/SKILL.md`，不要用旧的品牌限额覆盖它。
 
 ```bash
 python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
@@ -228,9 +228,9 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
   --raw-count <delta_rows>
 ```
 
-`--after` 用导出标准输出里的 `after`。数据日期是这个起点在 Asia/Shanghai 的日历日。文档写完并核对子块数之后，脚本向群 `oc_27040b0dc3a733ab164199154c489fad` 发两条消息：一条是上海数据日期和 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`，另一条是 `build_doc.py` 生成的 Word。不发到别的会话，文本里不附文章标题或正文。
+`--after` 用导出标准输出里的 `after`。数据日期是这个起点在 Asia/Shanghai 的日历日。副本写完并核对子块数之后，脚本向群 `oc_27040b0dc3a733ab164199154c489fad` 发两条消息：一条是上海数据日期和 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`，另一条是 `build_doc.py` 生成的 Word。不发到别的会话，文本里不附文章标题或正文。
 
-主文档和群消息都完成后，用另一套应用把同一份正文清空并写入 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`（节点 `DoXTwxbK1iX60yk282AcEN5Mn0e`）。这套应用只读 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET`，不用于群消息、比较表、正文文件或 Word。群消息仍然只带原来的 prnewswire 链接。副本写失败时，主文档、群消息和 Word 已经完成，标准输出里 `copy_feishu=failed`。不要为此再跑一遍发布脚本。
+日报只写入 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`（节点 `DoXTwxbK1iX60yk282AcEN5Mn0e`）。这套应用只读 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET`，不用于群消息、比较表、正文文件或 Word。群消息和 Word 仍用原来的 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`，链接只放副本。不要清空或重写 prnewswire 主文档。副本写入失败时不要发群消息，也不要改去写主文档。不要为此再跑一遍发布脚本。
 
 ## 定时运行
 
@@ -242,14 +242,14 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
 
 1. 触发器选 Scheduled，只用 `0 23 * * 0-4`。Automations 的 cron 按 UTC 计算。周二到周五的窗口是昨天 07:00（含）到今天 07:00（不含）。周一的窗口是上周五 07:00（含）到周一 07:00（不含）。不要改回每一天都只拉 24 小时，也不要在周六日触发。文档写明可以延迟触发，但不会早于设定时间开始。
 2. 选中本仓库。cron 类触发器默认可以不带仓库；不带仓库时 agent 拿不到这份脚本。
-3. 看到 `run the cision mentions skill`，或这套定时自动化被触发时，同一次运行里只做这些事。先运行 `export_mentions.py --stream-id 1023128`。它会按表里的 `id` 去重，清空并重写比较用的多维表格，并在 `delta_rows` 大于 0 时把只有原始列的 `delta.csv` 推到群。看标准输出的 `delta_rows`。等于 0 就停在这条导出摘要，不要抓正文，不要跑 `baidu-competitor-daily`，不要清空或重写日报文档，不要发第二条消息。大于 0 时，立刻用同一次输出的 `delta_csv` 和 `after` 运行 `extract_bodies.py`，写成 `delta-bodies.xlsx` 并推送。然后按上一节跑筛选、策展、翻译，再运行 `publish_daily_report.py`：清空并重写飞书文档，把上海数据日期、wiki 链接和 Word 文件发到同一群，并把同一份正文写入第二份文档 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`。不要逐条 URL 另开对话。不要打印 token、密钥或 mention 正文。不要再传 chat id、wiki 或 table id。不要把正文写入当日表。Word 只由这个发布脚本生成并发送，不要另存一份再发到别的会话。其他 stream 需要推群时才给导出命令加 `--push-feishu`，并且不要跑正文脚本，也不要跑日报。
-4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。第二份日报文档还要 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET`，只给那一份 wiki 用。正文步骤还要 `FIRECRAWL_API_KEY`。缺抓取密钥时，脚本在发送正文文件之前停止，也不改当日表。缺副本凭证时，主文档、群消息和 Word 照旧完成，`copy_feishu=failed`，不要重跑发布。新的 cloud agent 在启动时会注入已保存的 Runtime Secret，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
+3. 看到 `run the cision mentions skill`，或这套定时自动化被触发时，同一次运行里只做这些事。先运行 `export_mentions.py --stream-id 1023128`。它会按表里的 `id` 去重，清空并重写比较用的多维表格，并在 `delta_rows` 大于 0 时把只有原始列的 `delta.csv` 推到群。看标准输出的 `delta_rows`。等于 0 就停在这条导出摘要，不要抓正文，不要跑 `baidu-competitor-daily`，不要清空或重写日报文档，不要发第二条消息。大于 0 时，立刻用同一次输出的 `delta_csv` 和 `after` 运行 `extract_bodies.py`，写成 `delta-bodies.xlsx` 并推送。然后按上一节跑筛选、策展、翻译，再运行 `publish_daily_report.py`：只用副本应用清空并重写 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`，不写 prnewswire 主文档，然后把上海数据日期、副本链接和 Word 文件发到同一群。不要逐条 URL 另开对话。不要打印 token、密钥或 mention 正文。不要再传 chat id、wiki 或 table id。不要把正文写入当日表。Word 只由这个发布脚本生成并发送，不要另存一份再发到别的会话。其他 stream 需要推群时才给导出命令加 `--push-feishu`，并且不要跑正文脚本，也不要跑日报。
+4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。日报文档还要 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET`，只给副本 wiki 用。正文步骤还要 `FIRECRAWL_API_KEY`。缺抓取密钥时，脚本在发送正文文件之前停止，也不改当日表。缺副本凭证时不要改文档，也不要发日报群消息，不要改去写主文档。新的 cloud agent 在启动时会注入已保存的 Runtime Secret，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
 
 **文档没有保证、因此这里不当作已支持能力的部分。**
 
 - 同一次论坛线索提到，带有 “Skip Install” 的旧自动化可能拿不到环境变量。创建后只核对注入的变量名，不要打印值。
 - 云端每次定时都会新开一次 cloud agent。环境快照不保留 `latest.csv`。`1023128` 的去重基线在飞书多维表格里，两次云端运行可以对着同一张表。其他 stream 仍靠本机 `latest.csv`；云端没有这份文件时，增量等于当次全量。Memories 不是 CSV 基线，本技能也不会把 mention 内容写进去。
-- Automations 自带 Slack 等工具，没有飞书推送工具。飞书只能走本脚本。群、比较表和 Word 用 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`。第二份日报文档只用 `FEISHU_COPY_APP_ID` 与 `FEISHU_COPY_APP_SECRET`。
+- Automations 自带 Slack 等工具，没有飞书推送工具。飞书只能走本脚本。群、比较表和 Word 用 `FEISHU_APP_ID` 与 `FEISHU_APP_SECRET`。日报文档只用 `FEISHU_COPY_APP_ID` 与 `FEISHU_COPY_APP_SECRET`。
 - 本仓库不提供笔记本 crontab。同一台磁盘不重置的机器上，用户可以自行用系统 cron 调用导出命令，那样 `latest.csv` 才能留给下一次。
 
 ## 禁止事项
@@ -258,6 +258,6 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
 - 不要提交 `full.csv`、`delta.csv`、`latest.csv` 或任何 mention 导出。
 - 汇报结果时只给行数、窗口和路径，不粘贴 mention 标题或正文。
 - 正文 xlsx 只发到 `oc_27040b0dc3a733ab164199154c489fad`，不要发到其他会话，也不要写入当日表。
-- 日报链接和 Word 也只发到这个群。文本里要有上海数据日期和 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`，不要附文章正文。
-- 不要删除日报 wiki 节点。只清空并重写它的文档正文。第二份文档同样只清空并重写 `DoXTwxbK1iX60yk282AcEN5Mn0e`，不要删节点，也不要改成别的文档。
+- 日报链接和 Word 也只发到这个群。文本里要有上海数据日期和 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`，不要附文章正文，也不要放 prnewswire 主文档链接。
+- 不要删除日报 wiki 节点。只清空并重写 `DoXTwxbK1iX60yk282AcEN5Mn0e` 的文档正文，不要删节点，也不要改成别的文档。不要清空或重写 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`。
 - 不要逐条 URL 让 agent 循环。抓取在 `extract_bodies.py` 里完成。

@@ -355,13 +355,14 @@ class BodyExtractTest(unittest.TestCase):
         self.assertIn("oc_27040b0dc3a733ab164199154c489fad", push_source)
         self.assertIn("publish_daily_report.py", skill)
         self.assertIn("baidu-competitor-daily", skill)
-        self.assertIn("PP88weeBdi1Pcgkmpxbc48lSn5e", skill)
         self.assertIn(
-            "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e", skill
+            "不要清空或重写 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`",
+            skill,
         )
         self.assertIn(
             "https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e", skill
         )
+        self.assertNotIn("copy_feishu=failed", skill)
         self.assertIn("FEISHU_COPY_APP_ID", skill)
         self.assertIn("FEISHU_COPY_APP_SECRET", skill)
         self.assertIn("等于 0 就停在这条导出摘要", skill)
@@ -372,6 +373,8 @@ class BodyExtractTest(unittest.TestCase):
         self.assertIn("send_text", publish_source)
         self.assertIn("DoXTwxbK1iX60yk282AcEN5Mn0e", publish_source)
         self.assertIn("copy_tenant_token", publish_source)
+        self.assertNotIn("PP88weeBdi1Pcgkmpxbc48lSn5e", publish_source)
+        self.assertNotIn("feishu_push.tenant_token", publish_source)
         self.assertIn("FEISHU_COPY_APP_ID", push_source)
         self.assertIn("FEISHU_COPY_APP_SECRET", push_source)
         self.assertNotIn("oc_27040b0dc3a733ab164199154c489fad", publish_source)
@@ -388,9 +391,9 @@ class BodyExtractTest(unittest.TestCase):
         )
         self.assertIn("data_date=2026-11-01", text)
         self.assertIn(
-            "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e", text
+            "https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e", text
         )
-        self.assertNotIn("jcn5bws14c2g", text)
+        self.assertNotIn("prnewswire.feishu.cn/wiki/PP88", text)
         self.assertNotIn("http://", text)
         self.assertEqual(
             publish_daily_report.data_date_from_after("2026-10-31T23:00:00.000Z"),
