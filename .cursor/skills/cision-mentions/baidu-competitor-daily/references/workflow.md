@@ -1,6 +1,6 @@
 # 运行工作流（百度竞品同业日报）
 
-本文件描述筛选到翻译的步骤。筛选脚本位于 `scripts/`，需 `openpyxl`。生成 Word 还需 `python-docx`。定时运行的最后一步是上一级 `scripts/publish_daily_report.py`：清空并重写固定飞书文档，用 `build_doc.py` 生成 Word，再把上海数据日期、wiki 链接和 Word 发到固定群。
+本文件描述筛选到翻译的步骤。筛选脚本位于 `scripts/`，需 `openpyxl`。生成 Word 还需 `python-docx`。定时运行的最后一步是上一级 `scripts/publish_daily_report.py`：只用副本应用清空并重写 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`，不写 prnewswire 主文档，用 `build_doc.py` 生成 Word，再把上海数据日期、副本链接和 Word 发到固定群。
 
 ## 0. 环境准备
 
@@ -81,7 +81,7 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
   --after "<导出摘要里的 after>" \
   --raw-count <delta_rows>
 ```
-脚本先清空固定 wiki 文档的正文，再写入两行式日报，然后调用 `scripts/build_doc.py` 生成 Word，最后把数据日期、wiki 链接和这个 Word 发到固定群。主文档和群消息完成后，再用 `FEISHU_COPY_APP_ID` / `FEISHU_COPY_APP_SECRET` 把同一份正文写入 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`。不要把 Word 发到别的会话。`--after` 与 `--raw-count` 仍必传。展示顺序用第五版的 `discover_events` 和 focus 稳定分块。
+脚本先用 `FEISHU_COPY_APP_ID` / `FEISHU_COPY_APP_SECRET` 清空 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e` 的正文，再写入两行式日报，不写 prnewswire 主文档。然后调用 `scripts/build_doc.py` 生成 Word，最后把数据日期、副本链接和这个 Word 发到固定群。不要把 Word 发到别的会话。`--after` 与 `--raw-count` 仍必传。展示顺序用第五版的 `discover_events` 和 focus 稳定分块。
 
 ## 3. 收尾自检清单
 

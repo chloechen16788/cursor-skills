@@ -31,7 +31,7 @@ description: >
 
 1. **接入数据源。** stream 只接 `1023128`。不要改导出命令、多维表格、群，也不要改密钥的变量名或取值。不要把密钥写进文件、命令行或对话。
 2. **导出和抓正文的顺序。** 同一次运行先 `export_mentions.py`，再 `extract_bodies.py`。`delta_rows` 为 0 就停：不抓正文，不改文档。
-3. **飞书文档产出。** 仍由 `cision-mentions/scripts/publish_daily_report.py` 清空并重写 wiki 节点 `PP88weeBdi1Pcgkmpxbc48lSn5e`。保留必传参数 `--after` 和 `--raw-count`。`--after` 仍是导出标准输出里的 `after`，`--raw-count` 仍是 `delta_rows`。
+3. **飞书文档产出。** 仍由 `cision-mentions/scripts/publish_daily_report.py` 清空并重写副本 wiki 节点 `DoXTwxbK1iX60yk282AcEN5Mn0e`，不写 `PP88weeBdi1Pcgkmpxbc48lSn5e`。保留必传参数 `--after` 和 `--raw-count`。`--after` 仍是导出标准输出里的 `after`，`--raw-count` 仍是 `delta_rows`。
 4. **定时时间。** 上海 07:00 仍是 `0 23 * * *`，上海 18:30 仍是 `30 10 * * *`。两套自动化分开，提示词仍是 `run the cision mentions skill`。
 
 不要改 `.cursor/skills/cision-mentions/SKILL.md` 的衔接行为，也不要改 `publish_daily_report.py`。

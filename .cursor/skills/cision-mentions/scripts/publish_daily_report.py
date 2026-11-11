@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""把日报写入固定飞书文档，再生成 Word，把日期、链接和 Word 发到固定群。
+"""把日报写入副本飞书文档，再生成 Word，把日期、副本链接和 Word 发到固定群。
 
-先在内存里组好正文，再清空文档子块并重写。不删除 wiki 节点。
+先在内存里组好正文，再清空副本的文档子块并重写。不写 prnewswire 主文档，也不删除 wiki 节点。
+文档只用 FEISHU_COPY_APP_ID 与 FEISHU_COPY_APP_SECRET。群消息和 Word 仍走原来的飞书应用。
 Word 由 baidu-competitor-daily/scripts/build_doc.py 生成，排序规则在那个脚本里。
 群只走 feishu_push，不能改到别的会话。文本消息不含标题和正文。
 """
@@ -21,8 +22,6 @@ from urllib.parse import quote
 import cision_lib
 import feishu_push
 
-REPORT_WIKI_TOKEN = "PP88weeBdi1Pcgkmpxbc48lSn5e"
-REPORT_WIKI_URL = "https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e"
 COPY_WIKI_TOKEN = "DoXTwxbK1iX60yk282AcEN5Mn0e"
 COPY_WIKI_URL = "https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e"
 SKILL_ROOT = Path(__file__).resolve().parent.parent / "baidu-competitor-daily"
@@ -56,7 +55,7 @@ COMPANY_CN = {
 
 
 def report_notice(data_date: str, counts: dict[str, int]) -> str:
-    """群消息只有日期、四栏目条数和固定 wiki 链接。"""
+    """群消息只有日期、四栏目条数和副本 wiki 链接。"""
     return "\n".join(
         [
             "百度海外舆情日报",
@@ -65,7 +64,7 @@ def report_notice(data_date: str, counts: dict[str, int]) -> str:
             f"自动驾驶={counts['自动驾驶']}",
             f"海外企业={counts['海外企业']}",
             f"企业领导人={counts['企业领导人']}",
-            REPORT_WIKI_URL,
+            COPY_WIKI_URL,
         ]
     )
 
@@ -490,7 +489,7 @@ def _api(token: str, method: str, url: str, payload: dict | None = None) -> dict
     return feishu_push.api_request(url, method, payload, token=token)
 
 
-def resolve_doc(token: str, wiki_token: str = REPORT_WIKI_TOKEN) -> str:
+def resolve_doc(token: str, wiki_token: str = COPY_WIKI_TOKEN) -> str:
     body = _api(
         token,
         "GET",
@@ -561,33 +560,6 @@ def write_blocks(token: str, doc_id: str, blocks: list[dict]) -> int:
     return written
 
 
-def _write_copy(blocks: list[dict]) -> dict:
-    """用另一套飞书应用把同一份正文写入第二份 wiki。失败不撤销主文档和群消息。"""
-    result = {
-        "copy_wiki_url": COPY_WIKI_URL,
-        "copy_written_blocks": 0,
-        "copy_feishu": "failed",
-    }
-    try:
-        if not feishu_push.copy_credentials_present():
-            raise RuntimeError(feishu_push.missing_copy_credentials_message())
-        token = feishu_push.copy_tenant_token()
-        doc_id = resolve_doc(token, COPY_WIKI_TOKEN)
-        clear_body(token, doc_id)
-        if list_children(token, doc_id):
-            raise RuntimeError("副本清空后仍有子块")
-        written = write_blocks(token, doc_id, blocks)
-        if len(list_children(token, doc_id)) != written:
-            raise RuntimeError("副本写入后的子块数与预期不符")
-        result["copy_written_blocks"] = written
-        result["copy_feishu"] = "sent"
-    except Exception as error:  # noqa: BLE001
-        detail = feishu_push.redact_secrets(str(error)).replace("\n", " ")
-        result["copy_error"] = detail
-        print(f"主文档、群消息和 Word 已完成，副本写入失败：{detail}", file=sys.stderr)
-    return result
-
-
 def write_word(
     final_path: Path, zh_path: Path, kb_path: Path, *, data_date: str, raw_count: int
 ) -> Path:
@@ -629,9 +601,11 @@ def publish(
     blocks, counts = build_blocks(
         final, zh, media_cn, leader_cn, data_date=data_date, raw_count=raw_count
     )
+    if not feishu_push.copy_credentials_present():
+        raise RuntimeError(feishu_push.missing_copy_credentials_message())
     if not feishu_push.credentials_present():
         raise RuntimeError(feishu_push.missing_credentials_message())
-    token = feishu_push.tenant_token()
+    token = feishu_push.copy_tenant_token()
     doc_id = resolve_doc(token)
     cleared = clear_body(token, doc_id)
     if list_children(token, doc_id):
@@ -653,17 +627,15 @@ def publish(
     except Exception as error:  # noqa: BLE001
         detail = feishu_push.redact_secrets(str(error))
         raise RuntimeError(f"文档已重写，说明已发送，Word 发送失败：{detail}") from None
-    summary = {
+    return {
         "data_date": data_date,
         "cleared_children": cleared,
         "written_blocks": written,
         "counts": counts,
-        "wiki_url": REPORT_WIKI_URL,
+        "wiki_url": COPY_WIKI_URL,
         "docx": str(docx_path),
         "feishu": "sent",
     }
-    summary.update(_write_copy(blocks))
-    return summary
 
 
 def format_summary(summary: dict) -> str:
@@ -680,17 +652,13 @@ def format_summary(summary: dict) -> str:
             f"wiki_url={summary['wiki_url']}",
             f"docx={summary['docx']}",
             f"feishu={summary['feishu']}",
-            f"copy_wiki_url={summary.get('copy_wiki_url', COPY_WIKI_URL)}",
-            f"copy_written_blocks={summary.get('copy_written_blocks', 0)}",
-            f"copy_feishu={summary.get('copy_feishu', 'failed')}",
         ]
-        + ([f"copy_error={summary['copy_error']}"] if summary.get("copy_error") else [])
     )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="清空并重写固定飞书日报文档，生成 Word，再把日期、链接和 Word 发到固定群"
+        description="清空并重写副本飞书日报文档，生成 Word，再把日期、副本链接和 Word 发到固定群"
     )
     parser.add_argument(
         "--final", required=True, help="prep_final.py 写出的 final.json"
