@@ -95,6 +95,11 @@ def _text_block(elements: list[dict]) -> dict:
     return {"block_type": 2, "text": {"elements": elements}}
 
 
+def _blank_line() -> dict:
+    """两条新闻之间的空行。内容用换行，避免飞书把空字符串当成非法文本。"""
+    return _text_block([_text_run("\n")])
+
+
 def _heading(level: int, content: str) -> dict:
     key = {1: "heading1", 2: "heading2", 3: "heading3"}[level]
     block_type = {1: 3, 2: 4, 3: 5}[level]
@@ -481,6 +486,7 @@ def build_blocks(
                         ]
                     )
                 )
+                blocks.append(_blank_line())
                 counts[sec] += 1
     return blocks, counts
 

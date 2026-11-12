@@ -1,6 +1,6 @@
 ---
 name: cision-mentions
-description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间窗口拉取 CSV、与上次全量去重，并推送增量。周二到周日的窗口是昨天 07:00 至今天 07:00；周一是上周五 07:00 至周一 07:00。提示词 run the cision mentions skill，以及上海时间周一到周五 07:00 的定时运行，都在同一次运行里先导出 stream 1023128、去重并重写比较表；delta_rows 大于 0 时再抓取正文，保留原列并追加 content，写成 delta-bodies.xlsx 发到同一群，然后按 baidu-competitor-daily 筛选、策展、翻译成四栏目日报，只用另一套飞书应用清空并重写副本飞书文档，不写 prnewswire 主文档，再把上海数据日期、副本链接和 Word 文件发到同一群。delta_rows 等于 0 就停，不抓取，也不改文档。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
+description: 导出 Cision / Streem mentions。列出监测流的 id 与 label，或在已有 stream id 时按上海时间窗口拉取 CSV、与上次全量去重，并推送增量。周二到周日的窗口是昨天 06:30 至今天 06:30；周一是上周五 06:30 至周一 06:30。提示词 run the cision mentions skill，以及上海时间周一到周五 06:30 的定时运行，都在同一次运行里先导出 stream 1023128、去重并重写比较表；delta_rows 大于 0 时再抓取正文，保留原列并追加 content，写成 delta-bodies.xlsx 发到同一群，然后按 baidu-competitor-daily 筛选、策展、翻译成四栏目日报，只用另一套飞书应用清空并重写副本飞书文档，不写 prnewswire 主文档，再把上海数据日期、副本链接和 Word 文件发到同一群。delta_rows 等于 0 就停，不抓取，也不改文档。用户提到 Cision、Streem、mentions、监测流、舆情导出、飞书推送增量、正文或当日表时使用。
 ---
 
 # Cision mentions 导出
@@ -10,7 +10,7 @@ description: 导出 Cision / Streem mentions。列出监测流的 id 与 label�
 - 列出账号下的 Mention Stream，只打印 `id` 和 `label`。
 - 已有 stream id 时，导出该流在固定时间窗内的 mentions CSV，并与上一份全量去重。
 - 两条命令分开调用。导出 mentions 时不要先调用列表接口。
-- 提示词是 `run the cision mentions skill` 时，以及上海时间周一到周五 07:00 的定时自动化，都在同一次运行里做完整条流水线。先导出 stream `1023128`。`delta_rows` 大于 0 再抓取正文、生成四栏目日报、只用另一套飞书应用清空并重写副本飞书文档，不写 prnewswire 主文档，然后把数据日期、副本链接和 Word 文件发到同一群。等于 0 就停在导出摘要，不抓取，不改文档，也不再发一条消息。不要在周六或周日跑这条流水线。
+- 提示词是 `run the cision mentions skill` 时，以及上海时间周一到周五 06:30 的定时自动化，都在同一次运行里做完整条流水线。先导出 stream `1023128`。`delta_rows` 大于 0 再抓取正文、生成四栏目日报、只用另一套飞书应用清空并重写副本飞书文档，不写 prnewswire 主文档，然后把数据日期、副本链接和 Word 文件发到同一群。等于 0 就停在导出摘要，不抓取，不改文档，也不再发一条消息。不要在周六或周日跑这条流水线。
 
 基址是 `https://api.cision.one`。认证用请求头 `X-Auth-Token`，值只从环境变量 `CISION_API_TOKEN` 读取。不要把 token 放到命令行参数里，不要打印它，也不要写进日志。
 
@@ -54,20 +54,20 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 
 每次运行都用 Asia/Shanghai（UTC+8，无夏令时）的日历日，不另开参数改窗口：
 
-- 周二到周日：起点是昨天 07:00，含该时刻。终点是今天 07:00，不含该时刻。
-- 周一：起点是上周五 07:00，含该时刻。终点仍是周一 07:00，不含该时刻。周六日没有定时任务，这一窗补上周五 07:00 之后、整个周六和周日。
+- 周二到周日：起点是昨天 06:30，含该时刻。终点是今天 06:30，不含该时刻。
+- 周一：起点是上周五 06:30，含该时刻。终点仍是周一 06:30，不含该时刻。周六日没有定时任务，这一窗补上周五 06:30 之后、整个周六和周日。
 
-再把这两个时刻换成 UTC 传给接口。运行日是上海时间 2026-10-27（周二）时，无论上午还是下午，窗口都是 2026-10-26 07:00+08 到 2026-10-27 07:00+08，对应：
+再把这两个时刻换成 UTC 传给接口。运行日是上海时间 2026-10-27（周二）时，无论上午还是下午，窗口都是 2026-10-26 06:30+08 到 2026-10-27 06:30+08，对应：
 
-- `filter[range][after]=2026-10-25T23:00:00.000Z`
-- `filter[range][before]=2026-10-26T23:00:00.000Z`
+- `filter[range][after]=2026-10-25T22:30:00.000Z`
+- `filter[range][before]=2026-10-26T22:30:00.000Z`
 
-运行日是上海时间 2026-10-26（周一）时，窗口是 2026-10-23 07:00+08 到 2026-10-26 07:00+08，对应：
+运行日是上海时间 2026-10-26（周一）时，窗口是 2026-10-23 06:30+08 到 2026-10-26 06:30+08，对应：
 
-- `filter[range][after]=2026-10-22T23:00:00.000Z`
-- `filter[range][before]=2026-10-25T23:00:00.000Z`
+- `filter[range][after]=2026-10-22T22:30:00.000Z`
+- `filter[range][before]=2026-10-25T22:30:00.000Z`
 
-数据日期仍是窗口起点的日历日，所以周一的数据日期是上周五。去重仍用比较表里上一轮的 `id`。周五早上已经写入的稿不在这扇窗里，边界上重复的 id 会被去掉。不要在周六或周日手动跑 stream `1023128`，那一次会改写比较表。早于当天 07:00 的运行也按这个日历日计算，不会改成上一个窗口。
+数据日期仍是窗口起点的日历日，所以周一的数据日期是上周五。去重仍用比较表里上一轮的 `id`。周五早上已经写入的稿不在这扇窗里，边界上重复的 id 会被去掉。不要在周六或周日手动跑 stream `1023128`，那一次会改写比较表。早于当天 06:30 的运行也按这个日历日计算，不会改成上一个窗口。
 
 ## 去重
 
@@ -163,7 +163,7 @@ python3 .cursor/skills/cision-mentions/scripts/export_mentions.py --stream-id 10
 python3 .cursor/skills/cision-mentions/scripts/extract_bodies.py --delta-csv <delta.csv> --after <after>
 ```
 
-`--after` 用导出标准输出里的 `after`。不传时，从 `delta.csv` 的父目录名还原窗口起点。数据日期是这个起点在 Asia/Shanghai 的日历日。运行日 2026-10-27 的窗口起点是 2026-10-26 07:00+08，数据日期是 `2026-10-26`。运行日 2026-10-26（周一）的窗口起点是 2026-10-23 07:00+08，数据日期是 `2026-10-23`。
+`--after` 用导出标准输出里的 `after`。不传时，从 `delta.csv` 的父目录名还原窗口起点。数据日期是这个起点在 Asia/Shanghai 的日历日。运行日 2026-10-27 的窗口起点是 2026-10-26 06:30+08，数据日期是 `2026-10-26`。运行日 2026-10-26（周一）的窗口起点是 2026-10-23 06:30+08，数据日期是 `2026-10-23`。
 
 抓取在脚本里成批进行，调用 PATH 上的 `firecrawl scrape --only-main-content`。找不到命令时，和缺密钥一样，在发送文件之前停止。不要让 agent 每个 URL 单独开一轮。以后会有几百条 URL。密钥只从环境变量 `FIRECRAWL_API_KEY` 读取，不要写进命令行。
 
@@ -218,7 +218,7 @@ python3 .cursor/skills/cision-mentions/baidu-competitor-daily/scripts/make_zh_te
 2. `curation.py`：先按标题做唯一归属。不设每品牌限额，`CAP` 全是 `None`。不要在脚本跑完后再把一个品牌裁到 5 条或 8 条。
 3. `prep_final.py`：再按标题定归属，并按 URL 去重。同一规范化标题归在一起，组内按 focus、pscore、impact 排。`idx` 是译文键。展示顺序由 `build_doc.py` 的 `discover_events` 决定：同事件相邻，Apple Intelligence 入华在该品牌最前。不要手写事件标签，也不要把 `pscore` 放进这一层的排序键。
 4. 只根据标题填写 `zh.json`，不要读正文，也不要打印正文。媒体、品牌、领导人译名与知识库一一对应。`len(zh) == len(final)`。
-5. 运行发布脚本。它只用 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET` 解析 wiki 节点 `DoXTwxbK1iX60yk282AcEN5Mn0e` 的真实 docx token，先清空文档正文，再按样例版式写入。不要写 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`。三个一级标题是「一、国内竞品（含领导人）」「二、自动驾驶竞品（含领导人）」「三、海外竞品（含领导人）」；没有条目的栏目不印标题。品牌是二级标题。英文行整行加粗，半角冒号，整行链到原文。中文行整行加粗，全角冒号，不带链接。同事件的报道排在一起，Apple Intelligence 入华排在该品牌前面。同一条命令再用 `build_doc.py` 生成 Word，英文行是媒体、冒号、标题三段加粗链接。不要删除这个 wiki 节点，也不要改成别的文档，也不要再手改版式。筛选和排序的完整规则在 `baidu-competitor-daily/SKILL.md`，不要用旧的品牌限额覆盖它。
+5. 运行发布脚本。它只用 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET` 解析 wiki 节点 `DoXTwxbK1iX60yk282AcEN5Mn0e` 的真实 docx token，先清空文档正文，再按样例版式写入。不要写 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`。三个一级标题是「一、国内竞品（含领导人）」「二、自动驾驶竞品（含领导人）」「三、海外竞品（含领导人）」；没有条目的栏目不印标题。品牌是二级标题。英文行整行加粗，半角冒号，整行链到原文。中文行整行加粗，全角冒号，不带链接。每条新闻的中文行之后空一行，再写下一条。同事件的报道排在一起，Apple Intelligence 入华排在该品牌前面。同一条命令再用 `build_doc.py` 生成 Word，英文行是媒体、冒号、标题三段加粗链接。不要删除这个 wiki 节点，也不要改成别的文档，也不要再手改版式。筛选和排序的完整规则在 `baidu-competitor-daily/SKILL.md`，不要用旧的品牌限额覆盖它。
 
 ```bash
 python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
@@ -238,9 +238,9 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
 
 **Cursor 云端，已在文档里确认的部分。** [Automations](https://cursor.com/docs/cloud-agent/automations) 可以按预设或 cron 启动 cloud agent。用户必须自己创建并启用，地址是 [cursor.com/automations](https://cursor.com/automations)，也可以在 Agents 窗口里建。
 
-现在只留一套定时自动化，上海时间周一到周五 07:00。cron 用 `0 23 * * 0-4`，也就是 UTC 周日到周四 23:00。不要写成 `1-5`，那会跳过周一早上，改成周六早上发。不要再加 18:30。一个自动化里放两条 cron 时，只会触发第一条。提示词是 `run the cision mentions skill`。这句话的意思是在同一次运行里按顺序做导出、正文、四栏目日报和文档链接，不要再拆成第二个定时任务，也不要等用户再说一次。
+现在只留一套定时自动化，上海时间周一到周五 06:30。cron 用 `30 22 * * 0-4`，也就是 UTC 周日到周四 22:30。不要写成 `1-5`，那会跳过周一早上，改成周六早上发。不要再加 18:30。一个自动化里放两条 cron 时，只会触发第一条。提示词是 `run the cision mentions skill`。这句话的意思是在同一次运行里按顺序做导出、正文、四栏目日报和文档链接，不要再拆成第二个定时任务，也不要等用户再说一次。
 
-1. 触发器选 Scheduled，只用 `0 23 * * 0-4`。Automations 的 cron 按 UTC 计算。周二到周五的窗口是昨天 07:00（含）到今天 07:00（不含）。周一的窗口是上周五 07:00（含）到周一 07:00（不含）。不要改回每一天都只拉 24 小时，也不要在周六日触发。文档写明可以延迟触发，但不会早于设定时间开始。
+1. 触发器选 Scheduled，只用 `30 22 * * 0-4`。Automations 的 cron 按 UTC 计算。周二到周五的窗口是昨天 06:30（含）到今天 06:30（不含）。周一的窗口是上周五 06:30（含）到周一 06:30（不含）。不要改回每一天都只拉 24 小时，也不要在周六日触发。文档写明可以延迟触发，但不会早于设定时间开始。
 2. 选中本仓库。cron 类触发器默认可以不带仓库；不带仓库时 agent 拿不到这份脚本。
 3. 看到 `run the cision mentions skill`，或这套定时自动化被触发时，同一次运行里只做这些事。先运行 `export_mentions.py --stream-id 1023128`。它会按表里的 `id` 去重，清空并重写比较用的多维表格，并在 `delta_rows` 大于 0 时把只有原始列的 `delta.csv` 推到群。看标准输出的 `delta_rows`。等于 0 就停在这条导出摘要，不要抓正文，不要跑 `baidu-competitor-daily`，不要清空或重写日报文档，不要发第二条消息。大于 0 时，立刻用同一次输出的 `delta_csv` 和 `after` 运行 `extract_bodies.py`，写成 `delta-bodies.xlsx` 并推送。然后按上一节跑筛选、策展、翻译，再运行 `publish_daily_report.py`：只用副本应用清空并重写 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`，不写 prnewswire 主文档，然后把上海数据日期、副本链接和 Word 文件发到同一群。不要逐条 URL 另开对话。不要打印 token、密钥或 mention 正文。不要再传 chat id、wiki 或 table id。不要把正文写入当日表。Word 只由这个发布脚本生成并发送，不要另存一份再发到别的会话。其他 stream 需要推群时才给导出命令加 `--push-feishu`，并且不要跑正文脚本，也不要跑日报。
 4. 确认启动时能读到 `CISION_API_TOKEN`。`FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 已经是本环境的 Runtime Secret。日报文档还要 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET`，只给副本 wiki 用。正文步骤还要 `FIRECRAWL_API_KEY`。缺抓取密钥时，脚本在发送正文文件之前停止，也不改当日表。缺副本凭证时不要改文档，也不要发日报群消息，不要改去写主文档。新的 cloud agent 在启动时会注入已保存的 Runtime Secret，不要为它们重建环境。[Secrets 文档](https://cursor.com/docs/cloud-agent/security-network) 写明 Runtime Secret 会作为环境变量注入，同时在对话、工具输出和提交里打码。[构建文档](https://cursor.com/docs/cloud-agent/builds) 写明用户密钥在 agent 启动时加入，不进入构建快照。只核对变量名是否注入，不要打印值。
