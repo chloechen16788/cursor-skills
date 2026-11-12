@@ -95,7 +95,7 @@ def validate_page_size(page_size: int) -> int:
 
 
 def shanghai_window(now: datetime | None = None) -> tuple[str, str]:
-    """上海时间今天 07:00（不含）往前 24 小时。周一往前到上周五 07:00（含）。"""
+    """上海时间今天 06:30（不含）往前 24 小时。周一往前到上周五 06:30（含）。"""
     if now is None:
         current = datetime.now(SHANGHAI)
     elif now.tzinfo is None:
@@ -103,8 +103,8 @@ def shanghai_window(now: datetime | None = None) -> tuple[str, str]:
     else:
         current = now.astimezone(SHANGHAI)
     today = current.date()
-    end = datetime(today.year, today.month, today.day, 7, 0, tzinfo=SHANGHAI)
-    # 周六日不跑。周一从周五 07:00 拉起，补上周五白天、周六和周日，再靠比较表去掉周五早上已发的 id。
+    end = datetime(today.year, today.month, today.day, 6, 30, tzinfo=SHANGHAI)
+    # 周六日不跑。周一从周五 06:30 拉起，补上周五白天、周六和周日，再靠比较表去掉周五早上已发的 id。
     lookback_days = 3 if today.weekday() == 0 else 1
     start = end - timedelta(days=lookback_days)
     return _to_utc_z(start), _to_utc_z(end)

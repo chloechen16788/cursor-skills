@@ -89,4 +89,4 @@
 - **归属只看标题**：不要用正文或关键词频次补归属。
 - **媒体中文名口径**：CNBC 等在 KB 为全称「美国消费者新闻与商业频道」，报告按 KB 显示；如需简称需改 KB 或 `MEDIA_CN` 逻辑。
 - **数据覆盖偏差**：若某期国内/自动驾驶几乎无覆盖，多为数据本身特征，而非筛选问题，不必强行补录。
-- **自动化沉淀**：上海时间周一到周五 07:00 走父技能：filter3 → curation → prep_final → 填 `zh.json` → `publish_daily_report.py`。周一的导出窗是上周五 07:00 到周一 07:00。发布脚本重写飞书文档，并用 `build_doc.py` 生成 Word 发到同一群。展示顺序以 `discover_events` 加 focus 稳定分块为准。
+- **自动化沉淀**：上海时间周一到周五 06:30 走父技能：filter3 → curation → prep_final → 填 `zh.json` → `publish_daily_report.py`。周一的导出窗是上周五 06:30 到周一 06:30。发布脚本重写飞书文档，并用 `build_doc.py` 生成 Word 发到同一群。展示顺序以 `discover_events` 加 focus 稳定分块为准。

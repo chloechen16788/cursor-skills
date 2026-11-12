@@ -329,7 +329,8 @@ class BodyExtractTest(unittest.TestCase):
         self.assertIn("run the cision mentions skill", skill)
         self.assertIn("extract_bodies.py", skill)
         self.assertIn("一个自动化里放两条 cron 时，只会触发第一条", skill)
-        self.assertIn("`0 23 * * 0-4`", skill)
+        self.assertIn("`30 22 * * 0-4`", skill)
+        self.assertIn("每条新闻的中文行之后空一行", skill)
         self.assertNotIn("`30 10 * * *`", skill)
         self.assertIn("FIRECRAWL_API_KEY", skill)
         self.assertIn("MbglbIcF6aKwyXsCW7QcSTbIncb", skill)
@@ -399,6 +400,69 @@ class BodyExtractTest(unittest.TestCase):
             publish_daily_report.data_date_from_after("2026-10-31T23:00:00.000Z"),
             "2026-11-01",
         )
+
+    def test_blank_line_follows_each_news_item(self) -> None:
+        import publish_daily_report
+
+        final = [
+            {
+                "section": "海外企业",
+                "entity": "Apple",
+                "title": "Alpha product",
+                "url": "https://example.com/a",
+                "media_kb": "Bloomberg",
+                "impact": 2,
+                "idx": 0,
+                "focus": "",
+            },
+            {
+                "section": "海外企业",
+                "entity": "Apple",
+                "title": "Beta product",
+                "url": "https://example.com/b",
+                "media_kb": "Bloomberg",
+                "impact": 1,
+                "idx": 1,
+                "focus": "",
+            },
+        ]
+        blocks, counts = publish_daily_report.build_blocks(
+            final,
+            {0: "甲", 1: "乙"},
+            {"Bloomberg": "彭博"},
+            {},
+            data_date="2026-11-11",
+            raw_count=2,
+        )
+        texts = []
+        for block in blocks:
+            payload = block.get("text") or {}
+            texts.append(
+                "".join(
+                    element["text_run"]["content"]
+                    for element in payload.get("elements", [])
+                )
+            )
+        news = [
+            text
+            for text in texts
+            if text.startswith("Bloomberg") or text.startswith("彭博")
+        ]
+        self.assertEqual(
+            news,
+            [
+                "Bloomberg: Alpha product",
+                "彭博：甲",
+                "Bloomberg: Beta product",
+                "彭博：乙",
+            ],
+        )
+        alpha = texts.index("彭博：甲")
+        beta = texts.index("Bloomberg: Beta product")
+        self.assertEqual(texts[alpha + 1], "\n")
+        self.assertEqual(texts[beta - 1], "\n")
+        self.assertEqual(texts[-1], "\n")
+        self.assertEqual(counts["海外企业"], 2)
 
 
 if __name__ == "__main__":

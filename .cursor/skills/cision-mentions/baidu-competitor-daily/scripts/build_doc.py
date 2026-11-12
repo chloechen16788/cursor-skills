@@ -474,7 +474,10 @@ def main():
                 add_link(p1, it["url"], it["title"].strip(), bold=True)
                 p2 = doc.add_paragraph()
                 p2.paragraph_format.left_indent = Inches(0.2)
-                p2.paragraph_format.space_after = Pt(6)
+                p2.paragraph_format.space_after = Pt(0)
+                gap = doc.add_paragraph()
+                gap.paragraph_format.space_before = Pt(0)
+                gap.paragraph_format.space_after = Pt(0)
                 # 中文行：媒体名 + 全角冒号 + 中文标题，全部加粗
                 r2 = p2.add_run(media_cn + "：")
                 r2.font.size = Pt(10.5)
