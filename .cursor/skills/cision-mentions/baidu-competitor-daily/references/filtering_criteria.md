@@ -16,24 +16,20 @@
 - 联合国 / OECD / IEA 等机构 AI 预警
 - 就业影响
 
-## 二、板块（`section` 字段，顺序固定）
+## 二、三大板块（顺序固定）
 
-`section` 字段仍是国内企业、自动驾驶、海外企业、企业领导人。飞书正文只印有条目的栏目，标题为
-「一、国内竞品（含领导人）」「二、自动驾驶竞品（含领导人）」「三、海外竞品（含领导人）」。
-能解析到所属品牌的领导人挂到品牌下
-（马云 → 国内企业/阿里巴巴，Sundar Pichai → 海外企业/Alphabet/Google，Dara Khosrowshahi → 自动驾驶/Uber），
-所以「企业领导人」通常没有标题。解析不到的领导人保留自身实体，不丢条目。埃隆·马斯克没有单一品牌，仍是自动驾驶里的独立实体。
-不要把已经归到品牌下的领导人再挪回去。
+| 顺序 | 板块 | 合并/拆分 | 上限 |
+|------|------|-----------|------|
+| 一 | 国内竞品（含领导人） | 合并板块 | **无** |
+| 二 | 自动驾驶竞品（含领导人） | 合并板块 | **无** |
+| 三 | 海外竞品（含领导人） | 按品牌拆分 | **无** |
 
-| 顺序 | `section` | 内容 | 上限 |
-|------|-----------|------|------|
-| 一 | 国内企业 | 国内品牌，含已归入的国内领导人 | **无** |
-| 二 | 自动驾驶 | 自动驾驶品牌，含已归入的领导人；马斯克单独成实体 | **无** |
-| 三 | 海外企业 | 海外品牌，含已归入的海外领导人 | **无** |
-| 四 | 企业领导人 | 仅当领导人无法归入品牌时才有条目；现行表里通常为空 | **无** |
+> 2026-11-06 起由四板块改为三板块：取消独立的「企业领导人」板块，领导人题材一律归入其所属品牌下方
+> （马云 → 阿里巴巴、Sundar Pichai → Alphabet/Google、Dara Khosrowshahi → Uber …）。
 
-- **不设品牌配额**（`curation.py` 的 `CAP` 全为 `None`）。收录量由剔除规则决定，不由配额决定。
-  定时命令不要加 `--event-dedup`。不同媒体对同一事件的报道都保留。
+- **不设品牌配额**（`curation.py` 的 `CAP` 全为 `None`）。收录量由剔除规则决定，不由配额决定；
+  篇幅靠去重（尤其事件级去重）控制，而不是靠砍条数。
+- 三个板块内部均按品牌拆分；领导人不再单列，统一挂到所属品牌。
 - **归属一律只看标题**：摘要、关键词频次、正文均不参与，也没有任何回退（详见 §九）。
 - 同一篇报道**只归入一个板块 / 一个品牌**：按标题中最早出现的品牌名定唯一归属；
   领导人命中人名时归入其所属品牌（`leader_placement`），国内/自动驾驶标题仍命中本板块品牌则不迁移。
@@ -85,13 +81,13 @@
 > 完整执行顺序见 `workflow.md`；脚本产出即为最终形态，一般无需手工调整。
 
 ```
-英文媒体: 英文标题        ← 半角冒号+空格；整行一条超链接；整行加粗
-中文媒体：中文标题        ← 全角冒号；不带链接；整行加粗
+英文媒体: 英文标题        ← 半角冒号+空格；三段均为超链接（同指向原文）；整体加粗
+中文媒体：中文标题        ← 全角冒号；不带链接；整体加粗
 ```
 
-- 飞书正文没有文档大标题，开头是「原始记录 N 条，筛选入报告 M 条」。栏目是一级标题，品牌是二级标题。没有条目的栏目不印。
-- **英文行用半角冒号 `: `**，媒体名和标题放在同一个加粗超链接里，指向原文。
-- **中文行整行加粗**，全角冒号 `：`，不带链接。中文媒体名不带书名号。
+- **英文行用半角冒号 `: `**，且**媒体名、冒号、英文标题三段各自包在超链接里**，都指向同一原文 URL。
+- **条目内容一律加粗**：英文行三段、中文行的媒体名与标题，以及文档大标题，全部 `w:b`。
+  中文行仍为全角冒号 `：`、不带链接。副标题与「筛选说明」为说明性文字，保持浅灰细体。
 - 中文媒体名**不带书名号**（例：「财富」「CNBC」按 KB 显示）。
 - 中文标题内出现的领导人英文全名，自动替换为《翻译知识库》标准中文译名。
 
@@ -101,8 +97,9 @@
 > 增删竞品时，直接编辑 `filter3.py` 中 `DOMESTIC_BRANDS / DOMESTIC_LEADERS / AUTO_BRANDS / AUTO_LEADERS / OVERSEAS_BRANDS / OVERSEAS_LEADERS`。
 
 - 海外企业：Alphabet/Google（含 Gemini/DeepMind）、Microsoft、Meta、Apple、Amazon、Nvidia、IBM、Intel、**Tesla**、**OpenAI（含 ChatGPT/GPT）**、**Anthropic（含 Claude）**、Mistral、Perplexity
-- 国内企业：阿里巴巴/通义千问/Qwen、字节跳动/抖音/豆包/火山引擎、腾讯/微信/混元、华为/深度求索/智谱/**月之暗面/Moonshot（含 Kimi）**/百川/零一万物/Manus/商汤/小米/美团/京东/拼多多/Temu 等
+- 国内竞品：阿里巴巴/通义千问/Qwen、字节跳动/抖音/豆包/火山引擎、腾讯/微信/混元、华为/深度求索/智谱/**月之暗面/Moonshot（含 Kimi）**/百川/零一万物/Manus/商汤/小米/美团/京东/拼多多/Temu 等
 - **国内芯片 / 存储 / 光模块**（2026-11-05 补入）：沐曦 MetaX、摩尔线程 Moore Threads、长鑫存储 CXMT、长江存储 YMTC、天数智芯 Iluvatar、壁仞科技 Biren、中际旭创 Innolight
+- **云徙科技 Yunxi Technology**（2026-11-06 补入）：知识库里一直有译名但别名表漏收，稿件被静默丢弃
 - 自动驾驶：Waymo、Cruise、Zoox、Wayve、Uber、文远知行、小马智行、小鹏、滴滴、Lyft、Cybercab
 - 领导人：Sundar Pichai、Satya Nadella、Sam Altman、Dario Amodei、Mark Zuckerberg、Jensen Huang、Tim Cook、Andy Jassy、Jeff Bezos、Elon Musk 等（含对应的国内/自动驾驶领导人）
 
@@ -110,6 +107,8 @@
 > `filter3.py` 里的六个别名表。曾出现：CXMT / YMTC / Iluvatar / Biren / Innolight 在知识库里有中文名，
 > 但别名表未收录，稿件在归属环节被静默丢弃（日志无异常、报告里只是「少了几条」）。
 > **新增竞品的标准动作**：①加知识库品牌表 → ②加 `filter3.py` 别名表 → ③用一条真实标题验证能否归位 → ④重跑管线确认条数变化合理。
+> 2026-11-06 起 `filter3.py` 启动时会把「知识库里有、别名表里没有」的品牌直接打印成 `WARNING`，
+> 这类静默丢弃从此会暴露在运行日志里（`Cruise` 与 `Robotaxi`/`Cybercab` 等品类行属预期，已排除）。
 >
 > **别名撞常见词/人名时**用 `!` 前缀写大小写敏感正则，如壁仞：
 > `!(?<![A-Za-z])(?:Biren|BIREN)(?![A-Za-z])(?!\s+Singh)` —— `Biren` 也是印度常见名（Biren Singh），
@@ -156,12 +155,12 @@
 
 ## 十、2026-11-04 二次修正（取消限额 · 事件去重 · 前瞻分板块）
 
-> 用户明确：**不设置数量限额**；**海外企业剔除财报前瞻，自动驾驶与国内企业保留**；洛杉矶时报加入媒体库。
+> 用户明确：**不设置数量限额**；**海外竞品剔除财报前瞻，自动驾驶与国内竞品保留**；洛杉矶时报加入媒体库。
 
 1. **取消每品牌限额**：`curation.py` 的 `CAP` 全部置为 `None`。收录量由「剔除规则」决定，不再由配额决定。
    踩过的坑：原 `CAP={'海外企业':5}` 使 Apple 96 条候选只进 5 条，Siri AI、Anthropic IPO、Nvidia 中国业务等 10 条重点稿被挤出。
 2. **财报前瞻分板块**：`topic_gate` 第 6 条改为仅当 `ovb` 命中且无 auto/dom 命中时才剔。
-   Uber/Xpeng 等自动驾驶前瞻（含 robotaxi 投入）与国内企业前瞻一律保留。
+   Uber/Xpeng 等自动驾驶前瞻（含 robotaxi 投入）与国内竞品前瞻一律保留。
 3. **事件级去重（`prep_final.py --per-event`，默认 1）**：同板块+同实体内，两条标题 Jaccard≥0.5
    或共享≥2 个「稀有实词」（该品牌候选内出现 ≤4 次）即判定同一事件，只保留最靠前一条。
    效果：「Google 关闭学校搜索」12 个版本→1 条；「OpenAI 聘前陆军部长」7 个版本→1 条。
@@ -245,9 +244,7 @@
 `NASA's moonshot to the Moon` ✗剔、`A moonshot plan to cure cancer` ✗剔、
 `moonshot thinking at Google X` ✗剔且正确归 Google。
 
-### 3. 同一事件的多篇报道相邻
-
-定时飞书发布脚本在每个品牌内跑下面这套聚类，再按 focus 把入华稿整段抬到该品牌前面。不要在文档里手调顺序。
+### 3. 同一事件的多篇报道相邻（`build_doc.py`）—— 从数据自动发现，无手工词表
 
 **早期做法已废弃**：曾用手写事件标签（`school_ai` / `mna` / `buyout` / `watch_audio`…）。
 问题很明确——标签是照着当期数据写的，换一批数据就失效，无法支撑每日生成。**已全部删除。**
@@ -261,7 +258,7 @@
 3. **护栏**：单簇覆盖标题数不得超过 `EVENT_CAP`（0.55）× 该实体总数。
    没有这道护栏，大品牌会因**链式传递**塌缩成一个巨簇 —— 实测旧批次 Apple 46 条曾被并成 45 条一簇。
 4. 剩余未覆盖的标题各自独立成簇，不并成一个大「其他」。
-5. 簇间先按簇内最高 focus 等级（入华、其他 Apple Intelligence、其余），再按簇内最高 `impact` 降序；簇内同样先看 focus，再按 `impact`。聚类用全部条目做一次，再按 focus 稳定分块，避免子集聚类改动其他品牌的顺序。
+5. 簇间按簇内最高 `impact` 降序，簇内按 `impact` 降序。
 
 **阈值回归**（新旧两批数据同时验证）：
 
@@ -414,7 +411,7 @@
 ## 十六、2026-11-05 五补：客户重点关注 Apple Intelligence（入华优先）
 
 客户第一优先关注 Apple Intelligence 的产品与政策动态，其中「入华」类关注度最高。实现分三层，
-`focus` 字段写在 curation 和 prep_final 的条目上。定时飞书发布脚本读取它：`apple_intel_cn` 整段在该品牌最前，其次 `apple_intel`，其余仍按事件簇的最高影响力。入华稿按标题里最早出现的实体留下，而不是被国内品牌优先规则整条搬走。
+`focus` 字段贯穿 filter3 → curation → prep_final → build_doc。
 
 ### 1. 判定（`curation.apple_focus`，只看标题）
 
@@ -430,14 +427,21 @@
 
 评测与使用技巧类**按客户要求保留并加权**，不视为低价值噪音。
 
-### 2. 排序
+### 2. 排序（`build_doc.group_by_topic`）
 
-`pscore` 只影响 curation 在品牌内部的挑选顺序。`CAP` 为 `None`，所以加权不决定进不进报告。
-飞书文档在品牌内先按事件簇排，再把 `apple_intel_cn`、`apple_intel` 整段抬到该品牌前面。核对时看文档里该品牌开头是不是入华稿，并对照 `final.json` 的 `focus` 字段。
+先用**全量 items** 做事件聚类得到基础顺序，再按 focus 做**稳定分块**，块内保持原相对顺序。
+- `apple_intel_cn` 块 → `apple_intel` 块 → 普通块
+- 无 focus 的实体，分块结果与原顺序完全一致，**零副作用**
+
+> 为什么不能直接对「分块后的子集」聚类：样本数变化会改变词频 df 与阈值，连带挪动其它品牌顺序
+> （实测 Nvidia、Intel 等板块出现 17 处位移）。也不能把 `pscore` 放进簇排序键，同样会全局重排。
+
+实测 11-04 批 Apple 58 条：前 11 条为 Apple Intelligence 稿，第 12 条起才是内存涨价与财报。
+11-05 批：前 5 条全部为 Apple AI 稿（AI 预算削减 ×3、Siri Recaps、Siri 开放）。
 
 ### 3. 归属（`curation.unique_placement` + `prep_final` 重归位）
 
-focus 稿**按标题中最早出现的实体**归位，不套用「国内企业优先」。
+focus 稿**按标题中最早出现的实体**归位，不套用「国内竞品优先」。
 否则 `Apple Intelligence launches in China with Alibaba's Qwen model` 会被整条挪进「国内企业/阿里巴巴」，
 Apple 板块看不到最关键的入华动态。
 
@@ -502,17 +506,22 @@ Apple 板块看不到最关键的入华动态。
 
 436 条原始 → 166 候选 → 147 条；首版（未加规则）为 182 条，其中约 35 条属上述噪音。
 
-## 十八、2026-11-06 口径调整：领导人归入品牌 + 自动驾驶垂媒
+## 十八、2026-11-06 口径调整：三板块 + 自动驾驶垂媒
 
-### 1. 领导人归入所属品牌
+### 1. 板块由四改三，领导人归入所属品牌
 
-飞书只印有条目的栏目，标题用「国内竞品 / 自动驾驶竞品 / 海外竞品」。能解析到品牌的领导人写入该品牌的 `section`，第四栏通常不出现。
+| 旧 | 新 |
+|---|---|
+| 一、国内企业（含领导人） | **一、国内竞品（含领导人）** |
+| 二、自动驾驶（含领导人） | **二、自动驾驶竞品（含领导人）** |
+| 三、海外竞品企业 | **三、海外竞品（含领导人）** |
+| 四、海外竞品领导人 | （取消，并入各品牌） |
 
 实现：`filter3.leader_placement()` 把领导人实体解析成所属品牌 `(板块, 品牌)`。
 - 实体名带括号的（`Sundar Pichai (Alphabet/Google)`）直接取括号内公司；`DeepMind`/`AWS` 这类非 canon 名
   经 `LEADER_PARENT_ALIAS` 归一。
 - 实体名不带括号的国内领导人靠 `LEADER_PARENT` 显式指定（马云 → 阿里巴巴 …）。
-- `埃隆·马斯克/Elon Musk` 无单一品牌（Tesla/SpaceX/X/xAI），保留为独立实体，仍在自动驾驶板块。
+- `埃隆·马斯克/Elon Musk` 无单一品牌（Tesla/SpaceX/X/xAI），保留为独立实体，仍在自动驾驶竞品板块。
 - 解析不到的领导人退回自身实体，**不丢条目**。
 
 领导人匹配仍然承担「救回归属」的作用：标题只提人名（`Sundar Pichai says…`）时，靠领导人命中把稿件放到其品牌下。
@@ -542,3 +551,111 @@ KB 内原写法 `Tech In Asia` 统一为 **`Tech in Asia`**；`SRC_TO_KB` 保留
 
 `Eric Schmidt` 只收全名 `eric schmidt`，**不收裸 `Schmidt`** —— 德语姓氏过于常见
 （Helmut Schmidt、Schmidt hammer lassen 等），加裸姓会误收无关政治/建筑新闻。
+
+### 5. 政治规则的第三次收紧：机构动作豁免（2026-11-06）
+
+用户指出 `CNBC: Nvidia's Huang is asked to brief Congress on reported Chinese spy relationship` 未收录。
+追查：标题含 `Congress` → 命中 `POLITICS_PAT`；`BUSINESS_SIGNAL_PAT` 无对应词（不含 chip/AI/lawsuit 等）
+→ 判「纯政治评论」剔除。
+
+**这是误剔。** 国会/议会针对本公司的实质动作（要求作证、简报、传唤、听证）是监管与地缘政治议题，
+正是核心竞争情报。原规则的漏洞在于：`POLITICS_PAT` 里 `\bsenate\b|\bcongress\b` 与选举词混在一起，
+而 `BUSINESS_SIGNAL_PAT` 只认产业词、不认「公司被监管机构传唤」这一事实。
+
+**修法**：新增 `INSTITUTION_ACTION_PAT`
+
+```
+(asked|called on|urged|summoned|invited) to (brief|testify|appear)
+(seek|seeks|seeking|requested) (a) briefing
+(brief|briefing|testimony|testify) (congress|lawmakers|senate)
+testify | subpoena* | congressional hearing | senate hearing | hearing before
+appear(ed) before (congress|senate|lawmakers)
+```
+
+政治判断改为三条件：命中政治词 **且** 无商业信号 **且** **不是**（命中品牌 + 机构动作）→ 才判纯政治。
+`exclusion_reason()` 因此新增 `has_brand` 参数（主循环传入品牌命中结果）。
+
+**同时修 `campaign` 缺词边界**：裸 `campaign` 会匹配 `campaigners`（活动人士），
+导致 `Google refused 54K-name petition, say campaigners` 被当成选举稿剔除。改为 `campaigns?\b`。
+
+**效果**：本批 147 → 150 条，捞回 3 条，全部为真实情报；选举类 28 条照旧剔除，零误删。
+
+## 十九、2026-11-06 补充：中国相关科技议题一律收录
+
+**客户口径**：这些品牌（三个板块全部 tracked 品牌）在**芯片、AI、自动驾驶、无人驾驶、Robotaxi、
+中美科技监管**方面**与中国相关**的报道，必须收录。
+
+### 判据（只看标题）
+
+`filter3.china_tech_focus(head)` = 中国信号 **且** 科技议题信号：
+
+| 类别 | 关键词（节选） |
+|---|---|
+| 中国信号 | `China / Chinese / Beijing / PRC / mainland / Hong Kong / Taiwan / Shanghai / Shenzhen / Hangzhou`、`CAC / 网信办 / 工信部 / 商务部`、`rare earth`、以及中国公司名本身（`Huawei / BYD / SMIC / YMTC / CXMT / Alibaba / Tencent / ByteDance / Xiaomi / Baidu / DeepSeek / Moonshot / Qwen / Zhipu / MiniMax / SenseTime / Innolight / MetaX / Moore Threads / Iluvatar`）|
+| 科技议题 | `chip / semiconductor / foundry / HBM / DRAM / wafer / GPU`、`AI / LLM / model / agent`、`autonomous / self-driving / driverless / robotaxi / FSD`、`regulation / export control / entity list / antitrust / tariff / Congress / hearing` |
+
+### 三道效果
+
+1. **豁免各品牌话题门控**（`topic_gate`）。原口径下这些稿会被品牌门控误剔：
+   - `Tesla's China sales of FSD cars climb as robotaxi pilot expands` → 命中 `TESLA_DROP`（sales）
+   - `Amazon cuts China cloud prices to counter Alibaba's Qwen` → 命中「亚马逊非 AI」
+   - `Uber Eats expands in China with robotaxi pilot` → 命中「Uber/Lyft 外卖」
+2. **豁免「政治攻防」判据**（`STRONG_POLITICS_PAT`）。
+   `Nvidia loses billions in China as export curbs bite` 会命中 `loses billions`，
+   但它恰恰是中国市场最核心的情报。选举类叙事不受影响（不含中国科技信号）。
+3. **加权 +2**（`curation.FOCUS_CN_TECH`）：与 Apple Intelligence（+2/+4）同一套机制，
+   这些条目在同品牌内排到前面；报告「筛选说明」也写明该口径。
+
+> 两处正则 `filter3.CHINA_SIGNAL_PAT/CHINA_TECH_PAT` 与 `curation.CN_SIGNAL_PAT/CN_TECH_PAT` 是
+> **故意重复**的：filter3 决定「收不收」，curation 决定「排多前」。改一处必须改另一处，
+> 否则会出现「保留了却排最后」或「排前了却没保留」的静默不一致。
+
+### 边界
+
+- 加密货币仍按原口径剔除（即使带中国信号）。
+- 无品牌归属的标题仍不进报（归属只看标题，这是既有铁律）。
+- 纯中国宏观稿（`China's GDP slows`）不含 tracked 品牌 → 本来就不在归属范围内。
+
+## 二十、2026-11-10 修正：品牌「海外名」也必须进别名表（智谱 / Z.AI）
+
+**现象**：用户指出「应该有智谱的新闻没有筛选出来」。核对 11-10 批次 937 条：标题、摘要、正文里
+`zhipu / z.ai / GLM / chatglm / 智谱` 命中 **0 条**——本批数据确实没有智谱稿。但核对过程暴露了一个
+真实缺口：别名表里智谱只有 `zhipu`、`智谱`，**没有 `Z.AI`**。
+
+**为什么危险**：智谱的出海品牌是 **Z.AI（z.ai）**，海外媒体的标题几乎只写 `Z.AI`。
+原标题如 `Z.ai launches GLM-5 …` 在归属环节一条都认不出来，会整批落进「无品牌归属」被丢弃，
+而日志毫无异常。
+
+**修法**（`filter3.py` → `智谱/Zhipu`）：
+
+```
+['zhipu', '智谱', '~(?<![a-z0-9])z[.\-]ai(?![a-z0-9])', '~chatglm', '清言',
+ '!(?<![A-Za-z])GLM(?:[-\s]?\d[\w.]*)?(?![A-Za-z])']
+```
+
+- `Z.AI` 含点号，字面量模式的 `(?<![a-z0-9])…(?![a-z0-9])` 词边界对它不成立，必须用 `~` 走自定义正则，
+  并转义点号（同时容忍 `Z-AI` 写法）。
+- `GLM` 用 `!` 大小写敏感 + 前后非字母：小写 `glm`（统计学的 general linear model）不会误命中，
+  `GLM-5`/`GLM 4.6`/`GLM5` 都能命中。
+- 同时补 `MiniMax → 海螺 / Hailuo`（产品名即公司名，同「产品名归公司」口径）。
+
+**验收集**（改完必须能过）：
+
+| 标题 | 期望 |
+|---|---|
+| `Z.ai launches GLM-5 model with stronger coding ability` | 命中 智谱 |
+| `China's Z.ai takes on OpenAI with free coding model` | 命中 智谱 |
+| `GLM-5 tops open-source leaderboard` | 命中 智谱 |
+| `glm package for statistics` | 不命中 |
+| `Zaid's startup raises funding` / `Zaire election results` | 不命中 |
+
+**自检升级**：启动检查从「整行是否有别名」改为**逐段**比对。`Zhipu / Z.AI` 这种一行两个名字的写法，
+整行检查会因 `Zhipu` 命中而放行，`Z.AI` 的缺失被完全掩盖——这正是本次漏检的原因。
+现在会打印：
+
+```
+WARNING: 知识库品牌的部分写法没有别名（这些写法的稿件会漏收）: ['Zhipu/Z.AI → [Z.AI]']
+```
+
+> **通用教训**：凡是「中文名 / 英文名 / 海外品牌名」并列写在 KB 一行的，都要逐段确认别名。
+> 已知这类品牌：智谱 = Z.AI、月之暗面 = Kimi/Moonshot、MiniMax = 海螺、PonyAI = Pony.AI、01.AI = 零一万物。

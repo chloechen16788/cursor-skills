@@ -214,13 +214,17 @@ python3 .cursor/skills/cision-mentions/baidu-competitor-daily/scripts/make_zh_te
 
 顺序和规则：
 
-1. `filter3.py`：只留英文，且媒体必须在《翻译知识库》。剔除新闻稿。四个栏目按 国内企业、自动驾驶、海外企业、企业领导人。
+1. `filter3.py`：只留英文，且媒体必须在《翻译知识库》。剔除新闻稿。三个栏目按 国内竞品、自动驾驶竞品、海外竞品。领导人归入所属品牌，不再单列企业领导人。
 2. `curation.py`：先按标题做唯一归属。不设每品牌限额，`CAP` 全是 `None`。不要在脚本跑完后再把一个品牌裁到 5 条或 8 条。
 3. `prep_final.py`：再按标题定归属，并按 URL 去重。同一规范化标题归在一起，组内按 focus、pscore、impact 排。`idx` 是译文键。展示顺序由 `build_doc.py` 的 `discover_events` 决定：同事件相邻，Apple Intelligence 入华在该品牌最前。不要手写事件标签，也不要把 `pscore` 放进这一层的排序键。
-4. 只根据标题填写 `zh.json`，不要读正文，也不要打印正文。媒体、品牌、领导人译名与知识库一一对应。`len(zh) == len(final)`。
+4. 只根据标题填写 `zh.json`，不要读正文，也不要打印正文。媒体、品牌、领导人译名与知识库一一对应。`len(zh) == len(final)`。中文标题里「人工智能」写成 `AI`，「生成式人工智能」写成「生成式 AI」。公司名里的 AI 仍按知识库，例如 `Z.AI` 写成智谱。填完后运行 `check_zh.py`，error 必须为 0，再发布。
 5. 运行发布脚本。它只用 `FEISHU_COPY_APP_ID` 和 `FEISHU_COPY_APP_SECRET` 解析 wiki 节点 `DoXTwxbK1iX60yk282AcEN5Mn0e` 的真实 docx token，先清空文档正文，再按样例版式写入。不要写 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`。三个一级标题是「一、国内竞品（含领导人）」「二、自动驾驶竞品（含领导人）」「三、海外竞品（含领导人）」；没有条目的栏目不印标题。品牌是二级标题。英文行整行加粗，半角冒号，整行链到原文。中文行整行加粗，全角冒号，不带链接。每条新闻的中文行之后空一行，再写下一条。同事件的报道排在一起，Apple Intelligence 入华排在该品牌前面。同一条命令再用 `build_doc.py` 生成 Word，英文行是媒体、冒号、标题三段加粗链接。不要删除这个 wiki 节点，也不要改成别的文档，也不要再手改版式。筛选和排序的完整规则在 `baidu-competitor-daily/SKILL.md`，不要用旧的品牌限额覆盖它。
 
 ```bash
+python3 .cursor/skills/cision-mentions/baidu-competitor-daily/scripts/check_zh.py \
+  --zh <run>/zh.json \
+  --template <run>/zh_template.json \
+  --kb .cursor/skills/cision-mentions/baidu-competitor-daily/assets/翻译知识库.xlsx
 python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
   --final <run>/final.json \
   --zh <run>/zh.json \

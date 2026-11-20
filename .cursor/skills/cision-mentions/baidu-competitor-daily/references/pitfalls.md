@@ -11,7 +11,7 @@
 | 5 | PR 漏剔（独立字样） | Yahoo "paid press release" 未命中 | 补 `press ?release` 独立字样（扫描 标题/作者/摘要） |
 | 6 | 人名双键冲突 | 吴泳铭 `Eddie Wu` / `Yongen Wu` 并存 | 标准英文名取 `Eddie Wu`，`Yongen Wu` 仅作别名变体 |
 | 7 | 限额失效 | Anthropic 本应封顶 5 条却到 12 条 | **「按标题定唯一归属」必须在 curation 限额之前完成**（见 filter3 已并入 curation 早期） |
-| 8 | 中文错位 | final 由 66 变 61 后 ZH 列表未对齐 | `zh.json` 按 `idx` 对齐，并断言 `len(ZH)==len(final)`。飞书发布脚本按 `idx` 读取 |
+| 8 | 中文错位 | final 由 66 变 61 后 ZH 列表未对齐 | `build_doc.py` 改为从 `zh.json` 按 `idx` 对齐读取，并断言 `len(ZH)==len(final)` |
 | 9 | 翻译接口被拦截 | deep-translator 调用失败 | 改为模型逐条人工校对翻译，写入 `zh.json` |
 | 10 | 媒体口径反转 | Benzinga / The Register 一度被剔除，后须在 KB 内 | 仅收录 KB 媒体后，二者因在 KB 内而被纳入（覆盖早期「非头部媒体」剔除） |
 | 11 | Cruise 人名误命中 | `cruise` 词边界正则会命中 Tom Cruise、cruise ship / cruise missile / Princess Cruise Line | Cruise 改用 `(?<![a-z] )cruise(?![a-z0-9])(?!\s+(?:ship|missile|control|line\|liner\|cruiser))`；已验证 GM Cruise / Cruise's robotaxi 正常命中 |
@@ -29,7 +29,7 @@
 | 23 | 品牌限额挤掉重点稿 | `CAP={'海外企业':5}` 使 Apple 96 条候选只进 5 条；Siri AI、Anthropic IPO、Nvidia 中国业务等 10 条重点稿被挤出 | 取消限额（`CAP` 全置 `None`），收录量交给剔除规则决定；同时用事件级去重控制篇幅 |
 | 24 | 同事件跨媒体刷屏 | 「Google 关闭学校搜索」12 个版本、「OpenAI 聘前陆军部长」7 个版本各占一行 | `prep_final.py` 增加事件级去重：同实体+同板块内，Jaccard≥0.5 或共享≥2 个稀有实词即合并，`--per-event` 默认 1 |
 | 25 | 水果苹果误入 Apple 桶 | `José Pizarro's recipe for mussels with cider, chorizo and apple` 排到 Apple 桶第 2 | 加 `APPLE_FOOD_PAT`（菜谱/果园/果汁）与 `APPLE_TECH_PAT`（iphone/siri/tim cook）对照判定 |
-| 26 | 前瞻一刀切误伤自动驾驶 | Uber Q3 前瞻（含 robotaxi 投入）被当海外企业前瞻剔除 | 前瞻剔除改为仅对「纯海外企业」生效（有 ovb 且无 auto/dom 命中） |
+| 26 | 前瞻一刀切误伤自动驾驶 | Uber Q3 前瞻（含 robotaxi 投入）被当海外竞品前瞻剔除 | 前瞻剔除改为仅对「纯海外竞品」生效（有 ovb 且无 auto/dom 命中） |
 | 27 | 拿 pscore 当噪音判据 | 若按 `pscore>=1` 过滤，会误删 OpenAI 任命前陆军部长、好莱坞诉 OpenAI 版权、Anthropic 5.67 亿亏损、Meta 发债等高价值稿 | 只按议题类别剔除，不按评分阈值；`pscore` 仅用于排序 |
 | 28 | 媒体白名单挡住重要稿 | Waymo 洛杉矶扩张稿（LA Times）因媒体不在 KB 被整条丢弃 | 媒体库补 `Los Angeles Times / 洛杉矶时报`；日后遇到同类先查 KB 而非改规则 |
 
@@ -66,7 +66,7 @@
 | 54 | Amazon 的「AI model」标题被剔 | `AMAZON_KEEP` 里只有 `artificial intelligence` 没有裸 `ai`，`Amazon launches new AI model to rival OpenAI` 被判「亚马逊非AI」剔除 | `AMAZON_KEEP` 补 `\bai\b`。注意：`Alexa` 相关仍会被 EXCL 的「智能音箱」规则挡住，若需保留 Alexa AI 战略稿需单独调整该规则 |
 
 | 55 | 入华 Apple Intelligence 稿被挪到阿里 | `Apple Intelligence launches in China with Alibaba's Qwen model` 按「国内企业优先」整条进了「国内企业/阿里巴巴」，Apple 板块看不到最关键的入华动态 | focus 稿改按**标题最早出现实体**归位；`curation.unique_placement` 与 `prep_final` 的归属唯一化**两处都要加同一分支**，否则第二次归位会覆盖第一次 |
-| 56 | focus 加权在文档里看不见 | curation 已给 Apple Intelligence 加 pscore，但簇排序若只看 impact，加权会被抵消 | `group_by_topic`：先对全量标题做 `discover_events` 得到基础顺序，再按 focus 稳定分块。不能对分块后的子集聚类（样本数一变，阈值会挪动其它品牌，实测 17 处），也不能把 pscore 放进簇排序键。飞书发布和 `build_doc.py` 都走这一套 |
+| 56 | focus 加权在文档里看不见 | curation 已给 Apple Intelligence 加 pscore，但 `build_doc` 的簇排序只看 impact，加权被完全抵消 | `group_by_topic` 改为：先全量聚类得基础顺序，再按 focus 稳定分块。不能对分块子集聚类（df/阈值变化会挪动其它品牌 17 处），也不能把 pscore 放进簇排序键（全局重排） |
 | 57 | 裸 `chinese` 误判为入华 | `Apple Intelligence in Chinese language`（全球语言版）被当成中国市场落地，凭空升高优先级 | `APPLE_CN_PAT` 不用裸 `chinese`，要求 `chinese market/users/regulators/...`；语言类词（language/version/typing）明确排除 |
 
 | 58 | 领导人实体吞掉品牌稿 | `aliases_of` 把 `Dara Khosrowshahi (Uber)` 括号里的 `Uber` 也当成别名，所有 Uber 标题都命中该领导人；再叠加「同位置取 min」依赖 set 遍历顺序，**同一批数据两次运行归属可能不同**（实测 9 条 Uber 稿挂到人名下） | 括号是领导人标记（三个品牌表均无括号），括号内公司名不作为别名；并列位置改为 `(位置, 品牌优先, 实体名)` 确定性排序。草稿版 curation 与 prep_final 各有一份 `aliases_of`，两处都要改 |
@@ -82,11 +82,22 @@
 | 66 | 缺列崩溃不止 filter3 一处 | 修好 filter3 的 `col()` 后，`curation.py` 的 `load_raw()` 仍因 `content` 列缺失抛 KeyError —— 同一模式的重复实现分散在多个脚本 | 三个脚本的 `col()` 统一改为缺列返回空串。新增脚本若读 xlsx，必须检查是否有同样的直接索引 |
 | 67 | 领导人裸姓会误收 | `Schmidt` 是常见德语姓氏，若按 `Nadella`/`Pichai` 的短名风格给 Eric Schmidt 也加裸姓，会收进 Helmut Schmidt、建筑事务所等无关新闻 | 只收全名 `eric schmidt`。加领导人别名前先想一遍该姓是否常见 |
 
+| 68 | 国会/议会词把监管新闻当政治 | `Nvidia's Huang is asked to brief Congress on reported Chinese spy relationship` 因标题含 `Congress` 命中 `POLITICS_PAT`，且 `BUSINESS_SIGNAL_PAT` 没有对应产业词（标题无 chip/AI/lawsuit），被判「纯政治评论」剔除 | 新增 `INSTITUTION_ACTION_PAT`（要求作证/简报/传唤/听证）+ `has_brand`：**机构动作 + 已识别品牌** 时不算政治评论。选举叙事无机构动作，仍正常剔除 |
+| 69 | `campaign` 缺词边界误伤 campaigners | 裸 `campaign` 匹配到 `campaigners`（活动人士），`Google refused 54K-name petition, say campaigners` 被当成竞选稿剔除 | 改为 `campaigns?\b`。凡是用作「政治语境」的英文词（campaign/poll/vote），都要检查是否会命中同根的其他词 |
+
+| 70 | 中国相关科技稿被品牌门控误剔 | 客户要求「这些品牌在芯片/AI/自动驾驶/无人驾驶/Robotaxi/中美科技监管方面与中国相关的报道必须收录」，但各品牌门控只看单点特征：`Tesla's China sales of FSD cars climb as robotaxi pilot expands` 命中 `TESLA_DROP`（sales）；`Amazon cuts China cloud prices...` 命中「亚马逊非 AI」；`Nvidia loses billions in China as export curbs bite` 命中 `STRONG_POLITICS_PAT`（loses billions） | 新增 `china_tech_focus()`（中国信号 + 科技议题，仅标题）：在 `topic_gate` 里豁免品牌门控、在 `exclusion_reason` 里豁免强政治判据，`curation` 再加 +2 权重。注意 `filter3` 与 `curation` 各有一份正则，必须同步改 |
+| 71 | 知识库有译名、别名表没收录 = 静默丢弃 | `云徙科技 Yunxi Technology` 一直在《翻译知识库》品牌表里，但 `DOMESTIC_BRANDS` 漏收；该公司的稿件在归属环节被丢弃，日志毫无异常 | `filter3.py` 启动时对比 KB 品牌表与别名表，把没有对应别名的品牌打印成 `WARNING`（`Cruise`、`Robotaxi`、`Cybercab` 属预期，已列入跳过名单）。修法是把品牌补进别名表，而不是只看 KB |
+| 72 | `--drops` 缺失导致「该收未收」无从查证 | 每次用户问「这条为什么没收录」，只能人工猜是哪条规则；早期为此反复误判 | `filter3.py --drops drops.json` 会导出每条被剔稿件的 `reason`、命中的品牌与 `cn_tech` 标记，并按原因聚合打印。排查顺序：先看原因分布，再按品牌/关键词过滤 |
+| 73 | 品牌海外名没进别名表 → 整条产品线漏收 | 智谱的出海品牌是 `Z.AI`，但别名表只有 `zhipu`、`智谱`。海外媒体标题几乎只写 `Z.ai`（`Z.ai launches GLM-5…`），归属环节一条都认不出，全部落进「无品牌归属」被丢弃且日志无异常。用户问「智谱的新闻怎么没筛出来」才暴露 | 补 `~(?<![a-z0-9])z[.\-]ai(?![a-z0-9])`（点号必须转义，并走 `~` 自定义正则，否则词边界不成立）、`~chatglm`、`清言`、`!(?<![A-Za-z])GLM(?:[-\s]?\d[\w.]*)?(?![A-Za-z])`（大小写敏感，避开统计学的 glm）。同类：MiniMax↔海螺、月之暗面↔Kimi、PonyAI↔Pony.AI、01.AI↔零一万物 |
+| 74 | 品牌自检整行比对，掩盖单段缺失 | 启动自检原来判断「这一行 KB 品牌是否有任何一个名字命中别名」，`Zhipu / Z.AI` 因 `Zhipu` 命中而放行，`Z.AI` 缺别名完全看不出来 | 改为**逐段**比对：一行里任一名字没有别名就打印 `WARNING: 知识库品牌的部分写法没有别名`。品类词行（Robotaxi/Cybercab/Cruise）仍跳过 |
+| 75 | 撇号是弯的，正则写 `'` 匹配不到 | 标题 `…Stocks That Explain Today’s Market` 用的是 U+2019，规则写 `today'?s` 永远不命中，股评稿漏网 | 凡是英文所有格/缩写，正则用 `[\u2019']` 而不是裸 `'`。同类坑：破折号 –/— 与连字符 - |
+| 76 | 译文把 AI 写成「人工智能」 | 客户明确要求 `AI` 不翻译，但中文标题很容易顺手写成「人工智能芯片」「人工智能模型」，与客户统一口径不一致；人工逐条盯 100+ 条会漏 | 新增 `scripts/check_zh.py`：扫 `人工智能`/`人工智慧` 报错；同时检查中文行残留英文品牌名、`AI` 与中文之间缺空格。放在 build_doc 之前，error 必须为 0 |
+| 77 | 「AI 不翻译」被误用到公司名 | 规则写成「AI 保留」后，`Z.AI` 这类公司名也保留英文，于是标题出现「Z.AI 发布 GLM-5」，而客户要的是「智谱发布 GLM-5 AI 模型」 | 区分三层：通用词 `AI` 保留；公司名按 KB 译（`Z.AI`→智谱、`01.AI`→零一万物、`Pony.AI`→小马智行）；产品名保留（`GLM-5`、`ChatGLM`、`ChatGPT`、`Apple Intelligence`）。`check_zh.py` 的品牌表已排除「KB 中文名本身是英文」与品类词（Robotaxi），避免误报 |
 
 ## 额外注意事项
 
-- **同报道跨板块**：以标题最早出现的品牌定唯一归属。领导人命中人名时归入所属品牌，不要再放回「企业领导人」。国内/自动驾驶标题仍命中本板块品牌则不迁移。
-- **归属只看标题**：不要用正文或关键词频次补归属。
+- **同报道跨板块**：务必以「标题最早出现的品牌」定唯一归属，领导人命中人名优先归领导人板块；国内/自动驾驶板块标题仍命中本板块品牌则不迁移。
+- **国内/自动驾驶为全面收录**：匹配允许正文命中，可能命中量大，属正常。
 - **媒体中文名口径**：CNBC 等在 KB 为全称「美国消费者新闻与商业频道」，报告按 KB 显示；如需简称需改 KB 或 `MEDIA_CN` 逻辑。
 - **数据覆盖偏差**：若某期国内/自动驾驶几乎无覆盖，多为数据本身特征，而非筛选问题，不必强行补录。
-- **自动化沉淀**：上海时间周一到周五 06:30 走父技能：filter3 → curation → prep_final → 填 `zh.json` → `publish_daily_report.py`。周一的导出窗是上周五 06:30 到周一 06:30。发布脚本重写飞书文档，并用 `build_doc.py` 生成 Word 发到同一群。展示顺序以 `discover_events` 加 focus 稳定分块为准。
+- **自动化沉淀**：整套管线可封装为每日 7:00 自动化（filter3→curation→prep_final→人工翻译→build_doc），翻译步骤仍需人工/模型校对。

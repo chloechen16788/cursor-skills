@@ -1,109 +1,159 @@
 # 运行工作流（百度竞品同业日报）
 
-本文件描述筛选到翻译的步骤。筛选脚本位于 `scripts/`，需 `openpyxl`。生成 Word 还需 `python-docx`。定时运行的最后一步是上一级 `scripts/publish_daily_report.py`：只用副本应用清空并重写 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`，不写 prnewswire 主文档，用 `build_doc.py` 生成 Word，再把上海数据日期、副本链接和 Word 发到固定群。
+端到端步骤。所有脚本在 `scripts/`，纯 Python，需要 `openpyxl` 与 `python-docx`。
 
-## 0. 环境准备
+## 0. 环境
 
 ```bash
 pip install openpyxl python-docx
 ```
 
-## 1. 输入与产物概览
-
-```
-delta-bodies.xlsx  ──┐
-                     ├─> filter3.py ──> candidates.json
-翻译知识库.xlsx  ─────┘
-candidates.json + delta-bodies.xlsx ──> curation.py ──> curated.json
-curated.json ──> prep_final.py ──> final.json
-final.json ──> make_zh_template.py ──> zh_template.json
-zh_template.json +（按标题填写 zh.json）+ 翻译知识库.xlsx ──> publish_daily_report.py ──> 飞书文档 + Word + 群消息
-```
-
-- 定时运行的原始数据是 `delta-bodies.xlsx`（工作表名 `delta`，字段含 title/source/url/locationCountry/languageCode/keywords/impactScore/excerpt/author/content/publishedAt）。
-- 若手头只有 CSV、正文在 `transcript`，先转成同一张表再进入筛选。定时流水线已经有 `content` 列，不要插这一步。
+若系统 Python 缺 openpyxl，用工作区自带的 venv：
 
 ```bash
-python scripts/csv_to_delta.py --input delta.csv --out delta.xlsx
+~/.workbuddy/binaries/python/envs/default/bin/python -c "import openpyxl, docx; print('ok')"
 ```
 
-- 翻译知识库：`翻译知识库.xlsx`，含「媒体名称知识库 / 品牌名称翻译知识库 / 领导人名称翻译知识库」三表（一一对应）。
-- 只收录媒体白名单内的媒体。加媒体改知识库，不改导出命令。
+## 1. 输入与产物
+
+```
+delta.csv ──csv_to_delta.py──> delta.xlsx (sheet "delta")
+delta.xlsx + 翻译知识库.xlsx
+  → filter3.py           → candidates.json
+  → curation.py          → curated.json
+  → prep_final.py        → final.json
+  → make_zh_template.py  → zh_template.json
+  → [翻译] zh.json
+  → build_doc.py         → 报告.docx
+```
+
+- **原始数据**：监测导出。CSV 或 XLSX 均可；必需列 `title/source/locationCountry/languageCode/url/
+  publishedAt/excerpt/keywords/author/content/impactScore`。CSV 通常没有 `content`，正文在 `transcript`。
+- **翻译知识库**：`assets/翻译知识库.xlsx`，三张表「媒体名称知识库 / 品牌名称翻译知识库 / 领导人名称翻译知识库」，一一对应。
+
+> 本技能只收录**媒体白名单内**的媒体。加媒体要改 KB，不是改脚本。
 
 ## 2. 逐步执行
 
-> 说明：以下命令中的路径请替换为实际文件路径。脚本已参数化，不再写死绝对路径。
+下列路径请替换为实际路径。`$PY` 为 Python 解释器，`$SK` 为 `scripts/` 目录。
+
+**Step 0 — CSV 转 XLSX（输入已是 xlsx 可跳过）**
+```bash
+$PY $SK/csv_to_delta.py --input delta.csv --out delta.xlsx
+```
+`transcript` 自动映射为 `content`，列集合固定。输出会打印行数与所用正文字段。
 
 **Step 1 — 候选过滤**
 ```bash
-python scripts/filter3.py \
-  --input "/path/delta-bodies.xlsx" \
-  --kb   "/path/翻译知识库.xlsx" \
-  --out  candidates.json
+$PY $SK/filter3.py --input delta.xlsx --kb 翻译知识库.xlsx --out candidates.json --drops drops.json
 ```
-输出 `CANDIDATE COUNT` 及各板块命中统计。归属只看标题。媒体已在知识库里的，不因所在国被丢掉。
+打印 `CANDIDATE COUNT` 与各板块命中。期望量级：500 余条原始 → 200 余条候选。
+若某板块异常膨胀（如 Microsoft 上百条），检查别名是否过宽或关键词是否污染。
 
-**Step 2 — 优先级评分 + 唯一归属 + 去重**
+`--drops` 可选但**强烈建议**：把每条被剔稿件、剔除原因、命中品牌与 `cn_tech` 标记写入 json，
+并按原因聚合打印。用户问「这条为什么没收录」时先看它，不要靠猜。
+
+启动日志里另有两类 `WARNING`，出现即需处理：
+- `SRC_TO_KB 指向不存在的媒体` —— 映射写错，该写法不会生效。
+- `知识库里这些品牌没有对应的别名表条目` —— 有译名但收不进来，补 `filter3.py` 别名表
+  （`Cruise` / `Robotaxi` / `Cybercab` 属预期跳过）。
+
+**Step 2 — 归属唯一化 + 去重 + 评分**
 ```bash
-python scripts/curation.py \
-  --candidates candidates.json \
-  --raw "/path/delta-bodies.xlsx" \
-  --out curated.json
+$PY $SK/curation.py --candidates candidates.json --raw delta.xlsx --out curated.json
 ```
-不设品牌配额。`SELECTED COUNT` 与候选数的差额来自去重，不是限额。`pscore` 只排序，不决定是否收录。终端会打印 `TRANSLATION LIST`。
+不设品牌配额，因此 `SELECTED COUNT` 应接近 `CANDIDATE COUNT`（差额仅为去重所得）。
+打印 `TRANSLATION LIST` 供抽查。
 
-**Step 3 — URL / 同题去重 + 排序编号**
+**Step 3 — 排序编号（默认不做事件级去重）**
 ```bash
-python scripts/prep_final.py --input curated.json --out final.json
+$PY $SK/prep_final.py --input curated.json --out final.json
 ```
-打印 `TRANSLATION LIST (idx | media_kb | section | entity | title)`，**此清单的 idx 顺序即最终报告顺序**。
-默认同一家媒体的重复稿会去掉，不同媒体对同一事件的报道都保留。需要收成每个事件一条时再加 `--event-dedup`，并用 `--per-event N` 改保留条数。定时命令不要加这个参数。
+打印 `TRANSLATION LIST (idx | media_kb | section | entity | title)`；**该 idx 顺序即报告顺序**。
 
-**Step 4 — 生成翻译模板**
+**默认口径：不同媒体对同一事件的报道全部保留**，只剔除「同一篇稿的重复副本」
+（URL 相同、标题完全相同、同一媒体改题重发）——这三道在 Step 2 的 `curation` 里已完成。
+
+可选参数：
+- `--event-dedup`：启用事件级去重，同一事件只留代表稿（报告更紧凑，会丢弃同一事件的其他媒体角度）。
+- `--per-event N`：配合 `--event-dedup`，同一事件保留几条，默认 1。
+
+**Step 4 — 翻译模板**
 ```bash
-python scripts/make_zh_template.py --final final.json --out zh_template.json
+$PY $SK/make_zh_template.py --final final.json --out zh_template.json
 ```
-得到 `zh_template.json`：每项含 `idx / media_kb / section / entity / en / zh(空)`。
+每项含 `idx / media_kb / section / entity / en / zh(空)`。
 
-**Step 5 — 人工翻译**
-将 `zh_template.json` 中每项的 `"zh"` 填为中文标题，另存为 `zh.json`。
-- 翻译口径：标题级翻译即可，不必读正文。
-- 领导人中文名、媒体中文名**必须**与《翻译知识库》一一对应（发布脚本会套用 KB 标准译名，并替换中文行里的英文全名）。
-- `len(zh) == len(final)`，且每个 `idx` 都有译文。
-- 如环境允许自动翻译，可批量预填后再人工校对。不要把正文打进日志。
-- 条目只是微调时，可按规范化英文标题复用上一期中文，再按新 `idx` 回填。
+**Step 5 — 翻译**
+把每项 `zh` 填成中文标题，另存 `zh.json`（`{idx: 中文}` 字典亦可）。
+- 标题级翻译即可，不读正文。
+- **`AI` 不翻译**：一律写 `AI`，不写「人工智能」；`AI agent`→`AI 智能体`、`AI chip`→`AI 芯片`。
+  `LLM`/`GPU`/`AGI` 同样保留原文。AI 与中文之间留空格（`AI 智能体`），与既有排版一致。
+- **但公司名里的 AI 按知识库译**：`Z.AI`/`Z.ai` → **智谱**、`01.AI` → 零一万物、`Pony.AI` → 小马智行。
+  例：`Z.ai launches GLM-5 AI model` → 「智谱发布 GLM-5 AI 模型」。产品名保留原文
+  （`GLM-5`、`ChatGLM`、`ChatGPT`、`Claude`、`Apple Intelligence`）。
+- 品牌名一律用《翻译知识库》中文名，中文行不残留 `Google`/`Huawei`/`Zhipu` 这类英文写法。
+  KB 中文名本身就是英文的（OpenAI、Anthropic、Meta、IBM、TikTok、MiniMax）与品类词 `Robotaxi` 例外。
+- 媒体名、领导人名必须与《翻译知识库》一致；`build_doc` 会自动套用 KB 标准译名，
+  并替换中文行里残留的英文全名。
+- 若条目顺序有微调，可用「规范化英文标题 → 旧中文」映射复用旧译文，再按新 `idx` 回填。
+  务必确认每个 `idx` 都有值再生成文档。
 
-**Step 6 — 写入飞书文档并发链接**
+**Step 5b — 译文规范校验（必跑）**
 ```bash
-python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
-  --final final.json \
-  --zh zh.json \
-  --after "<导出摘要里的 after>" \
-  --raw-count <delta_rows>
+$PY $SK/check_zh.py --zh zh.json --template zh_template.json --kb 翻译知识库.xlsx
 ```
-脚本先用 `FEISHU_COPY_APP_ID` / `FEISHU_COPY_APP_SECRET` 清空 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e` 的正文，再写入两行式日报，不写 prnewswire 主文档。然后调用 `scripts/build_doc.py` 生成 Word，最后把数据日期、副本链接和这个 Word 发到固定群。不要把 Word 发到别的会话。`--after` 与 `--raw-count` 仍必传。展示顺序用第五版的 `discover_events` 和 focus 稳定分块。
+`error` 必须为 0，否则改完再跑。它会拦三类问题：
+「人工智能」（应写 `AI`）、中文行残留英文品牌名（含 `Z.AI` 应译「智谱」）、`AI` 与中文之间缺空格。
+复核历史稿件时加 `--soft`，只报告不阻断。
 
-## 3. 收尾自检清单
+**Step 6 — 生成 Word**
+```bash
+$PY $SK/build_doc.py \
+  --final final.json --zh zh.json --kb 翻译知识库.xlsx \
+  --raw-count 540 \
+  --out "百度海外舆情日报_竞品与领导人.docx"
+```
+`--raw-count` 仅用于副标题「原始记录 N 条」。
 
-生成后逐项核对：
-- [ ] 英文媒体标签全部为 KB「媒体名称知识库」键（无野媒体残留）。
-- [ ] 残留新闻稿（Press Release）为 0。
-- [ ] `section` 只有 `国内企业`、`自动驾驶`、`海外企业`、`企业领导人`。能解析到品牌的领导人在品牌下，不在「企业领导人」。马斯克仍在自动驾驶。
-- [ ] 飞书正文的一级标题是国内竞品、自动驾驶竞品、海外竞品。没有条目的栏目不印。英文行整行是加粗链接，半角冒号；中文行整行加粗，全角冒号。
-- [ ] 超链接数量 == final 条数（每篇报道一个外部链接）。
-- [ ] 同一 URL、同一标题、同一媒体的近题重复已去掉。不同媒体的同事件报道默认都在。
-- [ ] 无标题粘连条目。
-- [ ] 中文行无残留英文领导人全名（如 `Satya Nadella` 已替换为 `萨提亚·纳德拉`）。
-- [ ] 若「企业领导人」仍有无法归入品牌的人名，H2 为「中文名（英文名｜公司）」。已归入品牌的领导人不再单独成节。
-- [ ] Apple Intelligence 入华稿的 `focus` 为 `apple_intel_cn`，并落在标题里最先出现的品牌下。飞书和 Word 里，入华稿在该品牌最前，同事件的报道相邻。
-- [ ] 抽查几条：是竞品情报，而不是股评、消费评测或生活杂讯。
+## 3. 收尾自检
+
+脚本能保证结构，内容质量仍需人工判断：
+
+- [ ] 每条英文行有 **3 个 `<w:hyperlink>`**（媒体名 / 冒号 / 标题），全部英文行合计 = final 条数 × 3。
+      `word/_rels/document.xml.rels` 的 `http` 条目数 ≈ final 条数（同一 URL 复用同一 rId）。
+- [ ] 英文行冒号为半角 `: `，中文行为全角 `：`。
+- [ ] 条目文字全部加粗（英文行三段 + 中文行两段），文档大标题亦为粗体。
+- [ ] 三个一级标题齐全，顺序为 国内竞品 → 自动驾驶竞品 → 海外竞品（每节均「含领导人」）。
+- [ ] 领导人条目已归入其所属品牌（不再单列「企业领导人」板块）。
+- [ ] 英文媒体标签全部是 KB 媒体名，无野生媒体。
+- [ ] 媒体中文名已本地化（如 Reuters→路透社、BNN Bloomberg→BNN彭博社），不是英文。
+- [ ] 中文行无残留英文领导人全名（如 `Sam Altman` 应已是「萨姆·奥尔特曼」）。
+- [ ] `check_zh.py` 通过（error 0）：无「人工智能」、无残留英文品牌名、`AI` 与中文间有空格。
+- [ ] 领导人板块 H2 为「中文名（英文名｜公司）」。
+- [ ] 新闻稿残留为 0。
+- [ ] 促销/折扣稿（`$X off`、Black Friday、Prime Day）为 0。
+- [ ] Apple TV+ 剧集/电影稿为 0。
+- [ ] 纯股价涨跌快讯为 0（含 memory/margin 等实质议题的股价稿应保留）。
+- [ ] 含 moonshot 的条目已核：公司（大写 M）保留，「登月计划」已剔。
+- [ ] 同一品牌下同一事件的报道相邻（学校政策/财报/Robotaxi/债券发行各自成段）。
+- [ ] 同一事件的多家报道均保留（除非本次明确启用了 `--event-dedup`）。
+- [ ] 无标题粘连/乱码条目。
+- [ ] 抽查 5–10 条：确为竞品情报，而非股评、消费评测、生活杂讯。
 
 ## 4. 知识库维护
 
-若需新增/修正媒体、品牌、领导人译名，编辑 `翻译知识库.xlsx` 后，用 `consolidate_kb.py` 重新整理：
-```bash
-python scripts/consolidate_kb.py --src "/path/待整理知识库.xlsx" --out "/path/翻译知识库.xlsx"
-```
-脚本会做「一一对应」校验（同一中文译名不得对应多个英文），并拆出独立的领导人表。不要改这个脚本。
+新增/修正媒体、品牌、领导人译名，编辑 `assets/翻译知识库.xlsx`，再用 `consolidate_kb.py` 整理：
 
-加媒体后用一篇已知稿件跑一遍，确认它出现在 `final.json` 里。历史上在库媒体曾被国家闸静默丢掉，见 `pitfalls.md` 第 30 条。
+```bash
+$PY $SK/consolidate_kb.py --src 待整理.xlsx --out 翻译知识库.xlsx
+```
+
+脚本做「一一对应」校验（同一中文不得对应多个英文），并拆出独立领导人表。
+
+**加媒体后必须回归验证**：即使名字进了 KB，也可能被其他闸门挡掉（历史上被「重点市场」静默丢弃的
+案例见 `pitfalls.md` #30）。用一篇已知稿件跑一遍，确认它真的出现在 `final.json` 里。
+
+## 5. 定时运行
+
+`cision-mentions` 的定时流水线最后一步仍是上一级 `scripts/publish_daily_report.py`，不要停在 `build_doc.py`。它只用副本应用清空并重写 `https://jcn5bws14c2g.feishu.cn/wiki/DoXTwxbK1iX60yk282AcEN5Mn0e`，不写 `https://prnewswire.feishu.cn/wiki/PP88weeBdi1Pcgkmpxbc48lSn5e`。`--after` 和 `--raw-count` 仍必传。群消息带上海数据日期和副本链接，Word 由本目录 `build_doc.py` 生成后发到同一群。定时导出已经有 `content` 列，不要插入 `csv_to_delta.py`。`check_zh.py` 在发布前跑，error 必须为 0。没有条目的栏目不印标题。

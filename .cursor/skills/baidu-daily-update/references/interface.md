@@ -12,7 +12,7 @@
 
 `final.json` 条目字段：`idx`、`section`、`entity`、`title`、`url`、`media_kb`、`impact`。
 
-`section` 只使用：`国内企业`、`自动驾驶`、`海外企业`、`企业领导人`。
+`section` 只使用：`国内竞品`、`自动驾驶竞品`、`海外竞品`。
 
 `zh.json`：与 `final.json` 等长，按 `idx` 有非空 `zh`。
 
