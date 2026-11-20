@@ -388,7 +388,7 @@ class BodyExtractTest(unittest.TestCase):
 
         text = publish_daily_report.report_notice(
             "2026-11-01",
-            {"国内企业": 8, "自动驾驶": 53, "海外企业": 7, "企业领导人": 0},
+            {"国内竞品": 8, "自动驾驶竞品": 53, "海外竞品": 7},
         )
         self.assertIn("data_date=2026-11-01", text)
         self.assertIn(
@@ -406,7 +406,7 @@ class BodyExtractTest(unittest.TestCase):
 
         final = [
             {
-                "section": "海外企业",
+                "section": "海外竞品",
                 "entity": "Apple",
                 "title": "Alpha product",
                 "url": "https://example.com/a",
@@ -416,7 +416,7 @@ class BodyExtractTest(unittest.TestCase):
                 "focus": "",
             },
             {
-                "section": "海外企业",
+                "section": "海外竞品",
                 "entity": "Apple",
                 "title": "Beta product",
                 "url": "https://example.com/b",
@@ -462,7 +462,7 @@ class BodyExtractTest(unittest.TestCase):
         self.assertEqual(texts[alpha + 1], "\n")
         self.assertEqual(texts[beta - 1], "\n")
         self.assertEqual(texts[-1], "\n")
-        self.assertEqual(counts["海外企业"], 2)
+        self.assertEqual(counts["海外竞品"], 2)
 
 
 if __name__ == "__main__":

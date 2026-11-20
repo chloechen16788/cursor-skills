@@ -83,7 +83,7 @@ python3 .cursor/skills/cision-mentions/scripts/publish_daily_report.py \
   --raw-count <delta_rows>
 ```
 
-`final.json` 每条仍要有 `idx`、`section`、`entity`、`title`、`url`、`media_kb`、`impact`。四个 `section` 名称保持 `国内企业`、`自动驾驶`、`海外企业`、`企业领导人`。`zh.json` 按 `idx` 提供 `zh`。知识库三个表名保持「媒体名称知识库」「品牌名称翻译知识库」「领导人名称翻译知识库」。这些字段和表名是发布脚本已经在读的，改掉就要改发布脚本。
+`final.json` 每条仍要有 `idx`、`section`、`entity`、`title`、`url`、`media_kb`、`impact`。三个 `section` 名称保持 `国内竞品`、`自动驾驶竞品`、`海外竞品`。领导人归入所属品牌，不再单列「企业领导人」。`zh.json` 按 `idx` 提供 `zh`。中文标题里「人工智能」写成 `AI`，「生成式人工智能」写成「生成式 AI」；公司名里的 AI 仍按知识库。知识库三个表名保持「媒体名称知识库」「品牌名称翻译知识库」「领导人名称翻译知识库」。这些字段和表名是发布脚本已经在读的，改掉就要改发布脚本。
 
 参数和字段的短表在 `references/interface.md`。
 

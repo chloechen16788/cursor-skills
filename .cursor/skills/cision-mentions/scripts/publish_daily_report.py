@@ -28,12 +28,11 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent / "baidu-competitor-daily"
 DEFAULT_KB = SKILL_ROOT / "assets" / "翻译知识库.xlsx"
 BUILD_DOC = SKILL_ROOT / "scripts" / "build_doc.py"
 SECTION_TITLE = {
-    "国内企业": "一、国内竞品（含领导人）",
-    "自动驾驶": "二、自动驾驶竞品（含领导人）",
-    "海外企业": "三、海外竞品（含领导人）",
-    "企业领导人": "四、海外竞品领导人",
+    "国内竞品": "一、国内竞品（含领导人）",
+    "自动驾驶竞品": "二、自动驾驶竞品（含领导人）",
+    "海外竞品": "三、海外竞品（含领导人）",
 }
-SECTIONS = ["国内企业", "自动驾驶", "海外企业", "企业领导人"]
+SECTIONS = ["国内竞品", "自动驾驶竞品", "海外竞品"]
 SOURCE_TO_KB = {
     "Associated Press Online": "The Associated Press",
     "Bloomberg News Online": "Bloomberg",
@@ -55,15 +54,14 @@ COMPANY_CN = {
 
 
 def report_notice(data_date: str, counts: dict[str, int]) -> str:
-    """群消息只有日期、四栏目条数和副本 wiki 链接。"""
+    """群消息只有日期、三栏目条数和副本 wiki 链接。"""
     return "\n".join(
         [
             "百度海外舆情日报",
             f"data_date={data_date}",
-            f"国内企业={counts['国内企业']}",
-            f"自动驾驶={counts['自动驾驶']}",
-            f"海外企业={counts['海外企业']}",
-            f"企业领导人={counts['企业领导人']}",
+            f"国内竞品={counts['国内竞品']}",
+            f"自动驾驶竞品={counts['自动驾驶竞品']}",
+            f"海外竞品={counts['海外竞品']}",
             COPY_WIKI_URL,
         ]
     )
@@ -107,9 +105,7 @@ def _heading(level: int, content: str) -> dict:
 
 
 def _aliases_of(sec: str, ent: str) -> list[str]:
-    if sec == "企业领导人":
-        name = ent.split("(")[0].strip()
-        return [name.lower()] if re.search(r"[A-Za-z]", name) else []
+    del sec
     outs = []
     for part in re.split(r"[/((（）)]", ent):
         part = part.strip()
@@ -171,11 +167,13 @@ def prepare(
         hits = title_hits(str(item.get("title") or ""))
         if not hits:
             continue
-        if item["section"] in ("国内企业", "自动驾驶"):
-            if any(sec in ("国内企业", "自动驾驶") for _, sec, _ in hits):
-                continue
-        leads = [hit for hit in hits if hit[1] == "企业领导人"]
-        pick = min(leads or hits, key=lambda hit: hit[0])
+        if item.get("focus"):
+            pick = min(hits, key=lambda hit: hit[0])
+            item["section"], item["entity"] = pick[1], pick[2]
+            continue
+        if item["section"] in ("国内竞品", "自动驾驶竞品"):
+            continue
+        pick = min(hits, key=lambda hit: (hit[0], hit[1], hit[2]))
         item["section"], item["entity"] = pick[1], pick[2]
 
     seen: set[str] = set()
@@ -431,7 +429,10 @@ def build_blocks(
         (sec, defaultdict(list)) for sec in SECTIONS
     )
     for item in final:
-        groups[item["section"]][item["entity"]].append(item)
+        sec = item["section"]
+        if sec not in groups:
+            raise RuntimeError(f"未知栏目，未改文档：{sec}")
+        groups[sec][item["entity"]].append(item)
     raw_label = str(raw_count) if raw_count else "—"
     blocks = [
         _text_block(
@@ -448,6 +449,7 @@ def build_blocks(
                     "仅保留重点市场（中国、美国、英国、中东等）报道，且本期仅收录英文稿件；媒体来源限定于《翻译知识库》「媒体名称知识库」所列媒体，其余来源不收录。"
                     "已剔除 Windows/安卓补丁、手机/电脑硬件、医药/音箱、纯电商物流、非重点市场（法/意/德/日/新等）、低价值通稿与分析师评级类内容；"
                     "亦剔除加密货币、财报前瞻（实际业绩保留）、纯股价波动快讯，以及星链/SpaceX/推特、电动车换代、外卖等非重点话题。"
+                    "各品牌在芯片、AI、自动驾驶/无人驾驶/Robotaxi、中美科技监管方面与中国相关的报道一律收录，并在该品牌下优先展示。"
                 ),
             ]
         ),
@@ -462,7 +464,7 @@ def build_blocks(
             key=lambda pair: -max(item["impact"] for item in pair[1]),
         )
         for ent, items in entities:
-            heading = _leader_heading(ent, leader_cn) if sec == "企业领导人" else ent
+            heading = _leader_heading(ent, leader_cn) if " (" in ent else ent
             blocks.append(_heading(2, heading))
             for item in _ordered_items(items):
                 media = str(item["media_kb"])
@@ -649,10 +651,9 @@ def format_summary(summary: dict) -> str:
     return "\n".join(
         [
             f"data_date={summary['data_date']}",
-            f"国内企业={counts['国内企业']}",
-            f"自动驾驶={counts['自动驾驶']}",
-            f"海外企业={counts['海外企业']}",
-            f"企业领导人={counts['企业领导人']}",
+            f"国内竞品={counts['国内竞品']}",
+            f"自动驾驶竞品={counts['自动驾驶竞品']}",
+            f"海外竞品={counts['海外竞品']}",
             f"cleared_children={summary['cleared_children']}",
             f"written_blocks={summary['written_blocks']}",
             f"wiki_url={summary['wiki_url']}",
