@@ -1,0 +1,4 @@
+interface:
+  display_name: "飞书 CLI"
+  short_description: "飞书/Lark Bot：鉴权、群聊、收发消息、用户查询与通用 OpenAPI"
+  default_prompt: "使用 $byted-feishu-cli 通过飞书开放平台查询 Bot/群聊或收发消息。"

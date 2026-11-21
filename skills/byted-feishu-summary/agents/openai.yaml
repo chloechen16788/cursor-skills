@@ -1,0 +1,4 @@
+interface:
+  display_name: "飞书未读总结"
+  short_description: "总结近 24 小时飞书消息：与我相关 / 其他"
+  default_prompt: "使用 $byted-feishu-summary 总结我近 24 小时的飞书未读消息，分成与我相关和其他消息。"

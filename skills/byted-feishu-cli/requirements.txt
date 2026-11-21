@@ -1,0 +1,2 @@
+# byted-feishu-cli 仅使用 Python 标准库（urllib / argparse / json）。
+# 保留本文件以便与仓库内其他 skill 安装约定一致。
